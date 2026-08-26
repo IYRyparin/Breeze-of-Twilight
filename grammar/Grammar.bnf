@@ -1,0 +1,117 @@
+(* ======================================================
+   词法基础（大小写不敏感，仅字符串字面量保留大小写）
+   ====================================================== *)
+letter  = 'A' | 'B' | ... | 'Z' | 'a' | ... | 'z' ;
+digit   = '0' | '1' | ... | '9' ;
+identifier = letter, { letter | digit | '_' } ;
+integer    = digit, { digit } ;
+string     = '"', { 除 '"' 之外的任意字符 }, '"' ;
+boolean    = 'TRUE' | 'FALSE' ;
+null_lit   = 'NULL' ;
+
+(* 单行注释：'#' 直到行尾，词法分析时直接丢弃 *)
+comment = '#', { 除换行符之外的任意字符 }, 换行符 ;
+
+(* ======================================================
+   顶层程序结构（固定三段式）
+   ====================================================== *)
+Program ::= IdentificationSection, DatabaseSection, ConversionSection ;
+
+(* ======================================================
+   第一部分：IDENTIFICATION 标识段
+   ====================================================== *)
+IdentificationSection ::= { IdentificationStmt, ';' } ;
+
+IdentificationStmt ::= 'IDENTIFICATION', 'CONFIGURATION-ID', string
+                     | 'IDENTIFICATION', 'CONFIGURATION-VERSION', integer
+                     | 'IDENTIFICATION', 'CONFIGURATION-ENCODE', string
+                     | 'IDENTIFICATION', 'CONFIGURATION-READONLY', boolean ;
+
+(* ======================================================
+   第二部分：DATABASES 主数据段
+   注意：所有数据声明（包括 TABLE）均可选 CST（只读）或 MUT（可变）
+   ====================================================== *)
+DatabaseSection ::= 'DATABASES-START', ';', '{', { DatabaseDecl, ';' }, '}', ';', 'DATABASES-END', ';' ;
+
+DatabaseDecl ::= identifier, [ '[', TypeSpec, ']' ], [ AccessModifier ], '=', ( DatabaseValue | TableLiteral | Expression ), [ '->', 'LIMIT', LimitList ] ;
+
+AccessModifier ::= 'CST'                       (* 不可变 *)
+                 | 'MUT' ;                    (* 可变 *)
+
+(* ---------- 类型说明 ---------- *)
+TypeSpec ::= 'INT'
+           | 'STR'
+           | 'BOOL'
+           | 'TABLE', '<', TypeSpec, { ',', TypeSpec }, '>'   (* 明确支持 CST/MUT 修饰 *)
+           | 'DATABASE', [ '<', TypeSpec, '>' ]
+           | 'CONVERSION', '<', TypeSpec, '>'
+           | 'ENUM', '<', integer, { ',', integer }, '>' ;
+
+(* ---------- 数据库嵌套块 ---------- *)
+DatabaseValue ::= '{', { DatabaseDecl, ';' }, '}' ;
+
+(* ---------- 表字面量（支持尾随逗号） ---------- *)
+TableLiteral ::= '[', [ TableRow, { ',', TableRow }, [ ',' ] ], ']' ;
+TableRow     ::= '(', Expression, { ',', Expression }, ')' ;
+
+(* ---------- LIMIT 约束列表（统一使用 TO 表示区间） ---------- *)
+LimitList ::= LimitItem, { ',', LimitItem } ;
+LimitItem ::= string                            (* 如正则表达式 "^(*.?)" *)
+            | integer                           (* 单个数值 *)
+            | integer, 'TO', integer            (* 离散范围组合，如 10 TO 20 *)
+            | 'SUM', integer, 'TO', integer ;   (* 累加计算，如 SUM 1 TO 3 表示 1+2+3 *)
+
+(* ======================================================
+   第三部分：CONVERSION 动态转换段
+   修正：限制范围也使用 'TO' 替代 '~'，即 LIMIT 1 TO 50
+   ====================================================== *)
+ConversionSection ::= 'CONVERSION-START', ';', '{', { ConversionDecl, ';' }, '}', ';', 'CONVERSION-END', ';' ;
+
+ConversionDecl ::= 'CONVERSION', identifier, [ '[', TypeSpec, ']' ], WithSpec, [ 'LIMIT', integer, 'TO', integer ], '{', { CompareRule, ';' }, '}' ;
+
+WithSpec ::= 'WITH-TIME', identifier
+           | 'WITH-PATH', identifier
+           | 'WITH-VALUE', identifier, [ '=', Expression ]   (* 表达式可为 CALL ... *)
+           | 'WITH-COUNT', identifier ;
+
+CompareRule ::= 'COMPARE', ( Condition | 'DEFAULT' ), 'RETURN', Expression ;
+
+(* ---------- 条件表达式（支持链式比较，如 1 <= a <= 10） ---------- *)
+Condition ::= Expression, RelOp, Expression, { RelOp, Expression } ;
+RelOp    ::= '<' | '<=' | '==' | '>=' | '>' ;
+
+(* ======================================================
+   表达式系统（强类型）
+   包含 FORMAT / DEFAULT / SUM / CALL / RETURN 等前缀
+   ====================================================== *)
+Expression ::= RelExpr ;
+
+RelExpr ::= AddExpr, { RelOp, AddExpr } ;
+AddExpr ::= MulExpr, { ( '+' | '-' ), MulExpr } ;
+MulExpr ::= Prefix, { ( '*' | '/' | '%' ), Prefix } ;
+
+(* ---------- 前缀运算说明 ----------
+   - RETURN : 显式返回一个值（多用于转换规则体）
+   - CALL   : 调用内置命名空间（如 package.GetCurrentTime()）
+   - FORMAT DEFAULT expr : 先尝试格式化字符串，若格式未定义或失败则取 DEFAULT 后的值
+   - DEFAULT expr        : 无条件取默认值（常作为 COMPARE DEFAULT 的回退值，或单独作为空值备选）
+   - SUM expr TO expr    : 计算从 expr 到 expr 的累加和（要求为整数区间）
+   - 普通原子由 Atom 承接
+   ====================================================== *)
+Prefix ::= 'RETURN', Prefix
+         | 'CALL', Prefix
+         | 'FORMAT', 'DEFAULT', Prefix      (* 格式化占位，失败时回退到 Default 值 *)
+         | 'DEFAULT', Prefix                (* 无条件默认值/回退值 *)
+         | 'SUM', Expression, 'TO', Expression
+         | Atom ;
+
+(* ---------- 原子单元 ---------- *)
+Atom ::= integer
+       | string
+       | boolean
+       | null_lit
+       | MemberAccess
+       | '(', Expression, ')' ;
+
+(* ---------- 成员访问与函数调用（支持链式点操作） ---------- *)
+MemberAccess ::= identifier, { '.', identifier }, [ '(', [ Expression, { ',', Expression } ], ')' ] ;

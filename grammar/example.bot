@@ -1,0 +1,63 @@
+IDENTIFICATION CONFIGURATION-ID "example-configuration-id -> Breeze of Twilight";
+IDENTIFICATION CONFIGURATION-VERSION 1.0;
+IDENTIFICATION CONFIGURATION-ENCODE "UTF-8";
+IDENTIFICATION CONFIGURATION-READONLY FALSE;
+
+# This is an example notes.
+# Well...only support this.
+
+DATABASES-START;
+{
+    EXAMPLE_TABLE [TABLE<INT, STR, BOOL>] CST = NULL;
+    EXAMPLE_PARTITION [DATABASE<BOOL>] CST = {
+        EXAMPLE_BOOL_VALUE [BOOL] MUT = TRUE;
+        EXAMPLE_OTHER_BOOL [BOOL] MUT = FALSE;
+        EXAMPLE_SIMPLE_CALCULATION [BOOL] CST = RETURN 1 + 2 * 3 == 0;
+    };
+    LOCAL_SYSTEM_TIME [CONVERSION<STR>] CST = RETURN package.GetCurrentTime();  # package is a build-in namespace, and GetCurrentTime is a built-in function that returns the current system time as a string.
+    EXAMPLE_COUNTDOWN [CONVERSION<INT>] MUT = RETURN CountDown;
+    EXAMPLE_REGULAR_STRING [STR] MUT = "string" -> REGULAR ("^(*.?)");
+    EXAMPLE_FORMAT_STRING [STR] MUT = "Format string: " + FORMAT DEFAULT "1" + " get it.";
+    EXAMPLE_ENUM [ENUM<1, 2, 3, 4, 5>] MUT = DEFAULT 4;
+    EXAMPLE_TABLE_DATABASE [TABLE<INT, STR, BOOL>] MUT = [
+        (1, "Bob", TRUE),
+        (2, "Alex", FALSE),
+    ];
+    OFFSET_RANGER_NUMBER [INT] MUT = 1 -> LIMIT(1, 2, 3, 4, 5, 10 TO 20, !SUM 1 TO 3);
+    EXAMPLE_CONVERSION_GROUP [DATABASE] = {
+        TIME_CLOCK [CONVERSION<INT>] CST = RETURN TimeDelay;
+        PATH_CLOCK [CONVERSION<STR>] CST = RETURN PathDelay;
+        VALUE_CLOCK [CONVERSION<INT>] CST = RETURN ValueDelay;
+    };
+
+    # After the normal part, we will start some...fantastic part, yes, to check the parser's stable status.
+    FANTASTIC [STR] CST = "\";;;,,    &*$#(*(@()*@)(*()!(!#)#{}[]\"\"''''''''''''';:.,><?||\\\\\";  # :)";
+    FANTASTIC-2        [STR]       MUT           =  "\\"  ->        LIMIT( "\\", "0093"), REGULAR( "???", "!@"), LIMIT ("1", "2");
+};
+DATABASES-END;
+
+CONVERSION-START;
+{
+    CONVERSION TimeDelay [INT] WITH-TIME other_val {
+        COMPARE 0 < other_val.hour < SUM 1 TO 4 -> RETURN SUM 1 TO 2;
+        COMPARE 11 <= other_val.hour <= 24 -> RETURN 1 + 2;
+    };
+    CONVERSION PathDelay [STR] WITH-PATH other_val {
+        COMPARE other_val[0] == 'C' -> RETURN 1;
+        COMPARE OTHER_VAL[0] == 'D' -> RETURN 2;
+        COMPARE DEFAULT -> RETURN 3;
+    };
+    CONVERSION ValueDelay [INT] WITH-VALUE other_val [STR] = CALL package.local_machine.GetMacAddress() {
+        COMPARE DEFAULT -> RETURN other_val[1 TO 4];
+    };
+    CONVERSION CountDown [INT] WITH-COUNT countdown LIMIT 1 TO 50 {
+        COMPARE 1 <= countdown <= 4 -> RETURN 3;
+        COMPARE 5 <= countdown <= 9 -> RETURN 5;
+        COMPARE 10 <= countdown <= 13 -> RETURN 0;
+        COMPARE DEFAULT -> RETURN 1;
+    };
+    CONVERSION Outer [INT] WITH-VALUE other_val [STR] {
+        RETURN 1234;
+    }
+};
+CONVERSION-END;

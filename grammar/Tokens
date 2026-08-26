@@ -1,0 +1,36 @@
+LEFT_ARRAY_START_SIGNAL                 '('
+RIGHT_ARRAY_END_SIGNAL                  ')'
+LEFT_LIST_START_SIGNAL                  '['
+RIGHT_LIST_END_SIGNAL                   ']'
+LEFT_DATABASE_START_SIGNAL              '{'
+RIGHT_DATABASE_END_SIGNAL               '}'
+
+STRUCTURE_SPLIT_SIGNAL                  ','
+LINE_SPLIT_SIGNAL                       ';'
+DOT_SENTENCE_SPLIT_SIGNAL               '.'
+
+PLUS_MATH_SIGNAL                        '+'
+MINUS_MATH_SIGNAL                       '-'
+MULTI_MATH_SIGNAL                       '*'
+SLASH_MATH_SIGNAL                       '/'
+POWER_MATH_SIGNAL                       '**'
+
+CHECK_EQUAL_SIGNAL                      '=='
+CHECK_MORE_SIGNAL                       '>'
+CHECK_LESS_SIGNAL                       '<'
+CHECK_NOT_EQUAL_SIGNAL                  '!='
+CHECK_MORE_EQUAL_SIGNAL                 '>='
+CHECK_LESS_EQUAL_SIGNAL                 '<='
+
+MATCH_AND_SIGNAL                        '&&'
+MATCH_OR_SIGNAL                         '||'
+
+BYTE_AND_SIGNAL                         '&'
+BYTE_OR_SIGNAL                          '|'
+BYTE_NOT_SIGNAL                         '!'
+BYTE_XOR_SIGNAL                         '^'
+BYTE_LEFT_MOVE_SIGNAL                   '<<'
+BYTE_RIGHT_MOVE_SIGNAL                  '>>'
+
+VALUE_PUSH_SIGNAL                       '='
+VALUE_EXTEND_SIGNAL                     '->'
