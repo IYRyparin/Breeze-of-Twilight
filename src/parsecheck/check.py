@@ -35,3 +35,20 @@ class ReplacerDatabase(object):
                                  r'(?<group>\((?:\\?:|\\?<[^>]+>|\\?=|\\?!|\\?<=|\\?<!)?(?&internal)\))(?<atom>(?&literal)|'
                                  r'(?&escape)|(?&class)|(?&group))(?<quantifier>[*+?]|\{\d+(?:,\d*)?\})(?<item>(?&atom)'
                                  r'(?&quantifier)?)(?<branch>(?&item)*)(?<internal>(?&branch)(?:\|(?&branch))*))(?&internal)\$$')
+
+    """
+    STRING_CHARACTER_REPLACER: dict[str, str] = {}
+    STRING_CHARACTER_REPLACER.update({
+        f"\\x{i:02x}": chr(i)
+        for i in range(0x00, 0x100)
+    })
+    STRING_CHARACTER_REPLACER.update({
+        f"\\u{i:04x}": chr(i)
+        for i in range(0x0000, 0x10000)
+    })
+    """
+
+
+class SyntaxChecker(object):
+    def __init__(self, data: str) -> None:
+        self._data: str = data

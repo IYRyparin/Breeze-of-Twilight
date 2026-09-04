@@ -15,6 +15,7 @@ from typing import Final
 # GLOBAL VALUE SEGMENT START.
 
 LEGAL_STRING_WORD: Final[str] = "abcdefghijklmnopqrstuvwxyz1234567890-_"
+STATUS_CHAR:       Final[str] = "_!"
 
 
 class ConfigurationValueType:   # noqa

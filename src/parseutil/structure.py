@@ -3,7 +3,8 @@
 import ctypes
 from typing import Any
 
-from src.parsefunc.function import isinstance_loose, Counter
+from src.parsefunc.function import isinstance_loose
+from src.parsefunc.function import Counter as CustomCounter
 from src.parseutil.column import complex_data_type_checker
 from src.parseutil.kword import ConfigurationStatusExecutiveKeyword
 from src.parseutil.signal import TypeExplainFormatter
@@ -59,8 +60,7 @@ class ConfigurationSignalStructure(object):
         Because of mutually exclusion in the signal, so we need to check it when we need to use it.
         :return: bool
         """
-        return not sum(
-            [self._signal_in_data_type, self._signal_in_data_value, self._signal_in_data_extension_require]) > 1
+        return not sum([self._signal_in_data_type, self._signal_in_data_value, self._signal_in_data_extension_require]) > 1
 
     @property
     def signal_in_data_type(self) -> bool:
@@ -132,7 +132,9 @@ class ConfigurationSignalStructure(object):
 
         # After that, virtually the new statue and start to check the value's information and set the value.
         self._signal_in_data_extension_require = value
-        if not self.__check_state__():  # Check the value, if not supported, raise the exception and change the value.
+
+        # Check the value, if not supported, raise the exception and change the value.
+        if not self.__check_state__():
             self._signal_in_data_extension_require = not self._signal_in_data_extension_require
             raise KeyError(f"Illegal type: {value}, Only support one True value.")
 
@@ -183,11 +185,11 @@ class ConfigurationDataStandaloneSegmentStructure(object):
         self._value:              Any                               = None                        # Final value of the element.
         self._format:             ctypes.c_uint8                    = ctypes.c_uint8(0x00)        # Value and segment's format of the element.
         self._changeable:         bool                              = True                        # A signal, used to means that this value can be changed or not.
-        self._limit_value_list:   set[tuple[Any, ctypes.c_uint8]]   = set()                       # Which value you want to reject or accept.
+        self._limit_value_list:   list[tuple[Any, ctypes.c_uint8]]  = []                          # Which value you want to reject or accept.
         self._value_origin:       str                               = ""                          # Original value's string of the element.
         self._multi_loader:       list[tuple[int, bool]]            = []                          # A list used to format the value when program is running. It's load with two value, means the format signal's index, and can be changed manually or not.
         self._str_memory_pointer: list[str]                         = []
-        self._str_mem_counter:    Counter                           = Counter(0)
+        self._str_mem_counter:    CustomCounter                     = CustomCounter(0)
         # +----------------------+----------------------------------+---------------------------+-----------------------------------+
 
     # IDENTIFICATION SEGMENT PART. TO >>> BASIC VALUE SETTER SEGMENT.
@@ -288,14 +290,19 @@ class ConfigurationDataStandaloneSegmentStructure(object):
             raise TypeError("Not supported value's type.")
 
         # After checking, so we can start to check it is in the limit list or not.
-        for limit_item in self._limit_value_list:
-            if self._check_in_limit(new_value, limit_item):
-                self._value = new_value
-                break
+        if len(self._limit_value_list) > 0:
+            for limit_item in self._limit_value_list:
+                if self._check_in_limit(new_value, limit_item):
+                    self._value = new_value
+                    break
 
-        # When not break, we can raise the error means this is breaking the limit rule.
+            # When not break, we can raise the error means this is breaking the limit rule.
+            else:
+                raise ValueError("This value is in the limit list's rule, please check and change the rule.")
+
+        # Or nothing limit in here, so we can just add it into the value part.
         else:
-            raise ValueError("This value is in the limit list's rule, please check and change the rule.")
+            self._value = new_value
 
     # CODE SEGMENT PART END.
     # endregion
@@ -401,9 +408,14 @@ class ConfigurationDataStandaloneSegmentStructure(object):
 
     # CODE SEGMENT PART END.
     # endregion
+
     @property
     def probable_type(self):
         return self._probable_type
+
+    @property
+    def limit_value_list(self):
+        return self._limit_value_list
 
 # DATA SEGMENT END.
 # endregion

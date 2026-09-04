@@ -5,6 +5,7 @@ IDENTIFICATION CONFIGURATION-READONLY FALSE;
 
 # This is an example notes.
 # Well...only support this.
+# meow...^-^
 
 DATABASES-START;
 {
@@ -14,10 +15,14 @@ DATABASES-START;
         EXAMPLE_OTHER_BOOL [BOOL] MUT = FALSE;
         EXAMPLE_SIMPLE_CALCULATION [BOOL] CST = FALSE;
     };
-    LOAD_STRING [STR] = "Hello World!";
-    LOAD-INT [INT] = 1;
-    LOAD-BOOL [BOOL] = TRUE;
-    RUN-COMP [FILE] = "./test";
-    LOAD-FORMAT [INT] = 3;
+    LOAD_STRING [STR] CST = "Hello World!";
+    LOAD-INT [INT] MUT = 1;
+    LOAD-BOOL [BOOL] MUT = TRUE;
+    RUN-COMP [FILE] CST = "./testW";
+    PANE [STR] CST = "peokvmbokrgrgrgtwdfwrfrfftgtgyyjun";
+    VK-ANY [ANYTHING] CST = 0x01;
+
+    LOAD_LIMIT [INT] MUT = 0 -> LIMIT(1, 2, !5, !1_2);
+    LOAD_REGULAR [STR] MUT = "Hello!!!!!!!!!!!!!!!!" -> REGULAR("^ACPacp$");
 };
 DATABASES-END;

@@ -9,7 +9,7 @@ from collections import defaultdict
 # 获取当前工作目录的绝对路径，仅追踪该目录下的源码
 TARGET_DIR = os.path.abspath(os.getcwd())
 # 输出值的最大显示长度
-MAX_VAL_LEN = 80
+MAX_VAL_LEN = 1024
 
 # 存储每个栈帧上一次变量的 repr 快照
 previous_reprs = defaultdict(dict)

@@ -1,11 +1,12 @@
 import re
 import functools
 from ctypes import c_uint8
+from queue import Queue
 from typing import *
 
 from src.parsefunc.exception import *
 from src.parsefunc.function import LooseDict, infix_to_postfix, ConversionDecimal
-from src.parseutil.kword import LEGAL_STRING_WORD, ConfigurationExtensionKeyword
+from src.parseutil.kword import LEGAL_STRING_WORD, ConfigurationExtensionKeyword, STATUS_CHAR
 from src.parseutil.signal import ValueFormatter, ExtensionExplainFormatter, TypeExplainFormatter
 
 
@@ -60,11 +61,11 @@ def number_checker(base_temp_parse_string: str) -> tuple[int | float, ctypes.c_u
             case _:    return float(temp_parse_string),                                     ValueFormatter.DEC_NUMBER_FORMATTER  # noqa
 
 
-def complex_type_angle_brackets_check(dat_info_string: str,
-                                      right_move:      int,
-                                      left_bracket:    str  = "<",
-                                      right_bracket:   str  = ">",
-                                      string_ignore:   bool = True) -> tuple[int, int]:
+def brackets_edge_index_checker(dat_info_string: str,
+                                right_move:      int,
+                                left_bracket:    str  = "<",
+                                right_bracket:   str  = ">",
+                                string_ignore:   bool = True) -> tuple[int, int]:
     """
 
     :param string_ignore:
@@ -134,6 +135,38 @@ def complex_type_angle_brackets_check(dat_info_string: str,
 
     # Finally, we can return them.
     return first_final_message, last_final_message
+
+
+def first_signal_edge_checker(origin_string: str, signal_start: str, signal_end: str) -> int:
+    """
+
+    :param signal_end: str
+    :param signal_start: str
+    :param origin_string: str
+    :return: int
+    """
+    string_signal: bool = False
+    deep_signal:   int  = 0
+
+    # Start the loop.
+    for origin_index, origin_char in enumerate(origin_string):
+        if origin_char == "\"" and (origin_index == 0 or origin_string[origin_index - 1] != "\\"):
+            string_signal = not string_signal
+
+        # Check and increase the deep.
+        elif origin_char == signal_start and not string_signal:
+            deep_signal += 1
+
+        # Check and decrease the signal.
+        elif origin_char == signal_end and not string_signal:
+            deep_signal -= 1
+
+            # Check is zero or not.
+            if deep_signal == 0:
+                return origin_index
+
+    # Or anything else, just raise the Exception.
+    raise IndexError("Cannot find the correct edge of the signal.")
 
 
 @functools.lru_cache(maxsize=None)
@@ -291,9 +324,9 @@ class DatabasesSegmentTypeChecker(object):
 
     def dict_checker(self, string: str) -> Any:
         CHECKING_DICTIONARY: LooseDict = LooseDict({  # noqa
-            # +---------------+--------------------+
-            # |      KEY      |        VALUE       |
-            # +---------------+--------------------+
+            # +---------------+--------------------------------------+
+            # |      KEY      |                VALUE                 |
+            # +---------------+--------------------------------------+
             "int":              self.int_segment_type_checker,
             "string":           self.string_segment_type_checker,
             "float":            self.float_segment_type_checker,
@@ -303,18 +336,18 @@ class DatabasesSegmentTypeChecker(object):
             "anything":         self.anything_segment_type_checker,
             "enum":             self.enum_segment_type_checker,
             "table":            self.table_segment_type_checker
-            # +---------------+--------------------+
+            # +---------------+--------------------------------------+
         })
         key = string.strip().lower()
 
         # Common shorthand aliases mapping
-        ALIASES = {
+        aliases = {
             'str': 'string',
             'dbl': 'float',
             'flt': 'float'
         }
-        if key in ALIASES:
-            key = ALIASES[key]
+        if key in aliases:
+            key = aliases[key]
 
         # Return the correct value (function pointer).
         return CHECKING_DICTIONARY[key]
@@ -330,31 +363,31 @@ class DatabasesSegmentTypeChecker(object):
     # SETTER SEGMENT PART START.
 
     @staticmethod
-    def int_segment_type_checker(dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def int_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         return [int], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
-    def float_segment_type_checker(dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def float_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         return [float], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
-    def string_segment_type_checker(dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def string_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         return [str], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
-    def bool_segment_type_checker(dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def bool_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         return [bool], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
-    def databases_segment_type_checker(dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def databases_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         return [dict], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
-    def file_segment_type_checker(dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def file_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         return [str], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
-    def anything_segment_type_checker(dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def anything_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         return [Any], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     # SETTER SEGMENT PART END.
@@ -372,7 +405,7 @@ class DatabasesSegmentTypeChecker(object):
     # 
     # SETTER SEGMENT PART START.
 
-    def table_segment_type_checker(self, dat_info_string: str) -> tuple[list[type], c_uint8]:
+    def table_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], c_uint8]:  # noqa
         """
         Welp...This part of function is used to parse the table type.
         It will return a type value and a format signal, which means the value's type and value's format.
@@ -380,10 +413,14 @@ class DatabasesSegmentTypeChecker(object):
         :param dat_info_string: str     The basic string which you want to check.
         :return: tuple[type, ctypes.c_uint8]
         """
+        if dat_info_string is None:
+            raise ValueError("This function need to get the dat_info_string segment.")
+
+        # Lower the string, prepare for the parse.
         dat_info_string: str = dat_info_string.lower()
 
         # After that, we can mark the index to prepare for next part. From here, we will start to check the edge of the table.
-        limit_range: tuple[int, int] = complex_type_angle_brackets_check(
+        limit_range: tuple[int, int] = brackets_edge_index_checker(
             dat_info_string=dat_info_string,
             right_move=5
         )
@@ -435,7 +472,7 @@ class DatabasesSegmentTypeChecker(object):
         # So after all is done, we can just return it. Well...don't forget to change it.
         return final_saving_list, TypeExplainFormatter.LIST_TYPE_EXPLAIN
 
-    def union_segment_type_checker(self, dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:
+    def union_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
         """
         This function will return a type value and a format signal, which means the value's type and value's format.\n
         From the UNION type, is following those rules.\n
@@ -446,10 +483,14 @@ class DatabasesSegmentTypeChecker(object):
         :param dat_info_string: str     The basic string which you want to check.
         :return: tuple[type, ctypes.c_uint8]
         """
+        if dat_info_string is None:
+            raise ValueError("This function need to get the dat_info_string segment.")
+
+        # Lower the string, prepare for the parse.
         dat_info_string = dat_info_string.lower()
 
         # Now, we can start the UNION type's parsing right now.
-        limit_range: tuple[int, int] = complex_type_angle_brackets_check(
+        limit_range: tuple[int, int] = brackets_edge_index_checker(
             dat_info_string=dat_info_string,
             right_move=5
         )
@@ -487,7 +528,7 @@ class DatabasesSegmentTypeChecker(object):
         return final_saving_list, TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
-    def enum_segment_type_checker(dat_info_string: str) -> tuple[list[tuple[Any, ctypes.c_uint8]], ctypes.c_uint8]:
+    def enum_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[tuple[Any, ctypes.c_uint8]], ctypes.c_uint8]:  # noqa
         """
         This function is used to check the Enum data's type and value's format.\n
         The Enum data type is following those rules.\n
@@ -497,10 +538,14 @@ class DatabasesSegmentTypeChecker(object):
         :param dat_info_string: str     The basic string which you want to check.
         :return: tuple[list[Any], ctypes.c_uint8]
         """
+        if dat_info_string is None:
+            raise ValueError("This function need to get the dat_info_string segment.")
+
+        # Lower the string, prepare for the parse.
         dat_info_string = dat_info_string.lower()
 
         # Now, just start to check the edge.
-        limit_range: tuple[int, int] = complex_type_angle_brackets_check(
+        limit_range: tuple[int, int] = brackets_edge_index_checker(
             dat_info_string=dat_info_string,
             right_move=4  # len("enum") = 4
         )
@@ -520,7 +565,14 @@ class DatabasesSegmentTypeChecker(object):
 
             # Check out the terminate signal.
             elif element_char == "," and not string_signal:
-                final_saving_list.append(complex_data_type_checker(temp_saving_string))
+                value_loader: tuple[Any, c_uint8] = complex_data_type_checker(temp_saving_string)
+
+                # Check and make sure that queue is in here.
+                if isinstance(value_loader[0], str) and queue_loader is not None:
+                    value_loader = (queue_loader.get(), value_loader[1])
+
+                # Append the value into the list and clear the temp string.
+                final_saving_list.append(value_loader)
                 temp_saving_string = ''
 
             # Drop out the useless value in here.
@@ -532,19 +584,22 @@ class DatabasesSegmentTypeChecker(object):
                 string_signal = not string_signal
 
         # At last, so we can return them.
-        del dat_info_string, limit_range, temp_saving_string, string_signal, element_char, element_index
         return final_saving_list, TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
-    def conversion_segment_type_checker(self, dat_info_string: str) -> tuple[type, ctypes.c_uint8]:
+    def conversion_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[type, ctypes.c_uint8]:  # noqa
         """
 
         :param dat_info_string: str     The basic string which you want to convert.
         :return: tuple[type, ctypes.c_uint8]
         """
+        if dat_info_string is None:
+            raise ValueError("This function need to get the dat_info_string segment.")
+
+        # Lower the string, prepare for the parse.
         dat_info_string = dat_info_string.lower()
 
         # Start to check the limit range.
-        limit_range: tuple[int, int] = complex_type_angle_brackets_check(
+        limit_range: tuple[int, int] = brackets_edge_index_checker(
             dat_info_string=dat_info_string,
             right_move=10  # len("conversion") = 10
         )
@@ -592,7 +647,7 @@ class DatabasesSegmentValueChecker(object):
     # CODE SEGMENT PART START.
 
     @staticmethod
-    def int_number_parser(temp_parse_string: str) -> int:
+    def int_number_parser(temp_parse_string: str, queue_loader: Optional[Queue[str]]) -> int:  # noqa
         temp_parse_string = temp_parse_string.lower().strip()
         temp_parse_string = temp_parse_string.replace("_", "")
 
@@ -600,7 +655,7 @@ class DatabasesSegmentValueChecker(object):
         return int(number_checker(temp_parse_string)[0])
 
     @staticmethod
-    def float_number_parser(temp_parse_string: str) -> float:
+    def float_number_parser(temp_parse_string: str, queue_loader: Optional[Queue[str]]) -> float:  # noqa
         temp_parse_string = temp_parse_string.lower().strip()
         temp_parse_string = temp_parse_string.replace("_", "")
 
@@ -608,19 +663,23 @@ class DatabasesSegmentValueChecker(object):
         return float(number_checker(temp_parse_string)[0])
 
     @staticmethod
-    def string_parser(temp_parse_string: str) -> str:
+    def string_parser(temp_parse_string: str, queue_loader: Optional[Queue[str]]) -> str:
+        if queue_loader is not None:
+            return queue_loader.get()
+
+        # Start to parse the string.
         temp_parse_string = temp_parse_string.lower().strip()
         if temp_parse_string.startswith("\""): temp_parse_string = temp_parse_string[1 : ]  # noqa
         if temp_parse_string.endswith("\""):   temp_parse_string = temp_parse_string[ : -1]  # noqa
         return temp_parse_string
 
     @staticmethod
-    def boolean_parser(temp_parse_string: str) -> bool:
+    def boolean_parser(temp_parse_string: str, queue_loader: Optional[Queue[str]]) -> bool:  # noqa
         temp_parse_string = temp_parse_string.lower().strip()
         return temp_parse_string == "true"
 
     @staticmethod
-    def null_parser(temp_parse_string: str, follow: type = Any) -> str:  # noqa
+    def null_parser(temp_parse_string: str = "", queue_loader: Optional[Queue[str]] = None, follow: type = Any) -> str:  # noqa
         match follow.__name__:
             case 'int':     return '0'          # noqa
             case 'float':   return '0.0'        # noqa
@@ -628,15 +687,17 @@ class DatabasesSegmentValueChecker(object):
             case 'list':    return '[]'         # noqa
             case 'dict':    return '{}'         # noqa
             case 'bool':    return 'False'      # noqa
-            case _:         return None       # noqa
+            case _:         return None         # noqa
 
 
 class DatabaseSegmentExtensionRequireChecker(object):
-    def __init__(self, value_type: list[type], explain: ctypes.c_uint8) -> None:
+    def __init__(self,
+                 value_type: list[type] | None = None,
+                 explain: ctypes.c_uint8 | None = None) -> None:
         """
 
-        :param value_type: list[type]
-        :param explain: ctypes.c_uint8
+        :param value_type: list[type] | None
+        :param explain: ctypes.c_uint8 | None
         """
         self._value_parser_heap: DatabasesSegmentValueChecker = DatabasesSegmentValueChecker(
             value_type=value_type,
@@ -652,7 +713,7 @@ class DatabaseSegmentExtensionRequireChecker(object):
         dat_info_string = dat_info_string.lower().strip()
 
         # Find the edge, defines at '(' and ')'.
-        bracket: tuple[int, int] = complex_type_angle_brackets_check(
+        bracket: tuple[int, int] = brackets_edge_index_checker(
             dat_info_string=dat_info_string,
             right_move=0,
             left_bracket="(",
@@ -672,14 +733,12 @@ class DatabaseSegmentExtensionRequireChecker(object):
     def limit_rule_explain(self,
                            dat_info_string: str,
                            value_type: type,
-                           string_saving_memory: list[str],
-                           string_saving_pointer: list[int]) -> list[tuple[Any, ctypes.c_uint8]]:
+                           string_saving_memory: Queue[str]) -> list[tuple[Any, ctypes.c_uint8]]:
         """
 
-        :param string_saving_pointer: list[int]   An target pointer, used to show that where string is saved in.
         :param dat_info_string: type    The basic string which you want to check.
         :param value_type: list[str]    Limited value's type.
-        :param string_saving_memory: list[str]   The string saving memory, you can see it's described in parser.py.
+        :param string_saving_memory: Queue[str]   The string saving memory, you can see it's described in parser.py.
         :return: list[tuple[Any, ctypes.c_uint8]]
         """
         dat_info_string:    str                              = dat_info_string.lower().strip()
@@ -687,9 +746,13 @@ class DatabaseSegmentExtensionRequireChecker(object):
         final_saving_list:  list[tuple[Any, ctypes.c_uint8]] = []
         string_signal:      bool                             = False
 
+        # Add the end signal into the end of the string to parse normally.
+        if not dat_info_string.endswith(","):
+            dat_info_string = dat_info_string + ","
+
         # Start the loop to check the data.
         for element_index, element_char in enumerate(dat_info_string):
-            if element_char in list(LEGAL_STRING_WORD) and not string_signal:  # Load the legal char into the element.
+            if element_char in list(LEGAL_STRING_WORD + STATUS_CHAR) and not string_signal:  # Load the legal char into the element.
                 temp_string_memory += element_char
 
             # Check the string.
@@ -698,8 +761,7 @@ class DatabaseSegmentExtensionRequireChecker(object):
 
                 # Change the value into the correct part of it.
                 if not string_signal:
-                    temp_string_memory = string_saving_memory[string_saving_pointer[0]]
-                    string_saving_pointer[0] += 1  # Add the pointer and goto next part.
+                    temp_string_memory = string_saving_memory.get()
 
                 # Drop out other part, because we don't need it.
                 continue
@@ -714,51 +776,65 @@ class DatabaseSegmentExtensionRequireChecker(object):
                 prefix_temp_saver: ctypes.c_uint8
 
                 # Check the value's prefix to understand what it's mean.
-                prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHOUT_VALUE if temp_string_memory.startswith("!") else ExtensionExplainFormatter.LIMIT_WITHIN_VALUE
+                if temp_string_memory.startswith("!"):
+                    prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHOUT_VALUE
+                    temp_string_memory = temp_string_memory[1:]  # TODO: In here, need to support more formatter.
+                else:
+                    prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHIN_VALUE
 
                 # Match and get the correct type of the value.
                 match value_type.__name__:  # Owing to the undeniably profound fact, so in this version, it can't parse complex data like list, database, and so on.
-                    case "int":   value_type_saver = self._value_parser_heap.int_number_parser(temp_string_memory)
-                    case "float": value_type_saver = self._value_parser_heap.float_number_parser(temp_string_memory)
-                    case "str":   value_type_saver = self._value_parser_heap.string_parser(temp_string_memory)
-                    case "bool":  value_type_saver = self._value_parser_heap.boolean_parser(temp_string_memory)
-                    case "file":  value_type_saver = self._value_parser_heap.string_parser(temp_string_memory)
+                    case "int":   value_type_saver = self._value_parser_heap.int_number_parser(temp_string_memory, None)
+                    case "float": value_type_saver = self._value_parser_heap.float_number_parser(temp_string_memory, None)
+                    case "str":   value_type_saver = string_saving_memory.get()
+                    case "bool":  value_type_saver = self._value_parser_heap.boolean_parser(temp_string_memory, None)
+                    case "file":  value_type_saver = string_saving_memory.get()
                     case _:       value_type_saver = complex_data_type_checker(temp_string_memory)[0]
 
                 # Append the final information into the list.
                 final_saving_list.append((value_type_saver, prefix_temp_saver))
+                temp_string_memory = ""  # Clean the buffer.
 
         # So finally, we can return it.
         return final_saving_list
 
     @staticmethod
-    def regular_rule_explain(dat_info_string: str,
-                             string_saving_memory: list[str],
-                             string_saving_pointer: list[int]) -> list[tuple[str, ctypes.c_uint8]]:
+    def regular_rule_explain(dat_info_string: str, string_saving_memory: Queue[str]) -> list[tuple[str, ctypes.c_uint8]]:
         """
 
+        :param string_saving_memory:
         :param dat_info_string: str
-        :param string_saving_memory: list[str]
-        :param string_saving_pointer: list[int]
         :return: list[tuple[Any, ctypes.c_uint8]]
         """
-        dat_info_string: str = dat_info_string.lower().strip()
-
-        # Initializing...
-        string_signal: bool = False
+        dat_info_string:   str                              = dat_info_string.strip()
         final_saving_list: list[tuple[Any, ctypes.c_uint8]] = []
+        string_signal:     bool                             = False
+        string_loader:     str                              = ""
 
-        # Range the list, find how much regular string is in here.
+        # Load regular string from queue. In here, data string just used to check the prefix and count of the string.
         for element_index, element_char in enumerate(dat_info_string):
-            if element_char == "\"" or (element_index >= 1 and element_char == "\"" and dat_info_string[element_index - 1] != "\\"):
+            if element_char == "\"" and (element_index == 0 or dat_info_string[element_index - 1] != "\\"):
                 string_signal = not string_signal
 
-            # Search the signal, find the correct terminated part.
-            elif not string_signal and element_char == ",":
-                final_saving_list.append((string_saving_memory[string_saving_pointer[0]], ValueFormatter.REGULAR_STRING_FORMATTER))
-                string_saving_pointer[0] += 1  # Add the pointer and goto next part.
+            # Check the quit signal, load string into the list.
+            if (element_char == "," or element_index >= len(dat_info_string) - 1) and not string_signal:
+                prefix_index:   int     = 0
+                regular_signal: c_uint8 = ExtensionExplainFormatter.LIMIT_WITHIN_STRING_REGULAR
 
-        # So finally, we can just return it.
+                # Search and append the prefix index in here.
+                while string_loader[prefix_index] != "\"":
+                    match string_loader[prefix_index]:
+                        case '!': regular_signal = ExtensionExplainFormatter.LIMIT_WITHOUT_STRING_REGULAR
+                        case _:   pass  # noqa
+
+                # Check and push the value into here.
+                final_saving_list.append((string_saving_memory.get(), regular_signal))  # noqa
+                string_loader = ""
+
+            # Add other char into the loader.
+            string_loader += element_char
+
+        # Finally, return the list.
         return final_saving_list
 
 

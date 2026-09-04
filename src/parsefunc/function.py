@@ -714,11 +714,13 @@ class ConversionDecimal(object):
             s = s + "."
         return s
 
-    def _split_bits(self, binstr: str) -> tuple:
+    @staticmethod
+    def _split_bits(binstr: str) -> tuple:
         a, b = binstr.split(".")
         return a, b
 
-    def _normalize_parts(self, a_int, a_frac, b_int, b_frac):
+    @staticmethod
+    def _normalize_parts(a_int, a_frac, b_int, b_frac):
         # pad integer parts on left, fractional parts on right
         max_int = max(len(a_int), len(b_int))
         max_frac = max(len(a_frac), len(b_frac))
@@ -728,7 +730,8 @@ class ConversionDecimal(object):
         b_frac = b_frac.ljust(max_frac, '0')
         return a_int, a_frac, b_int, b_frac
 
-    def _strip_result(self, int_part: str, frac_part: str) -> tuple:
+    @staticmethod
+    def _strip_result(int_part: str, frac_part: str) -> tuple:
         # strip leading zeros from integer part but leave at least '0'
         int_part = int_part.lstrip('0')
         if int_part == "":
@@ -810,12 +813,12 @@ class ConversionDecimal(object):
     # endregion
 
 
+"""
 class Counter(object):
-    def __init__(self, value: int):
+    def __init__(self, value: int = 0) -> None:
         self._value = value
 
     def _get_and_inc(self) -> int:
-        """返回当前值，并将内部值加1"""
         v = self._value
         self._value += 1
         return v
@@ -841,7 +844,6 @@ class Counter(object):
 
     # ---- 二元算术运算 ----
     def _get_other(self, other):  # noqa
-        """如果 other 也是 Counter，则取其当前值并自增；否则直接返回 other"""
         if isinstance(other, Counter):
             return other._get_and_inc()
         return other
@@ -955,6 +957,21 @@ class Counter(object):
         else:
             self._value -= other
         return self
+"""
+
+
+class Counter(object):
+    def __init__(self, value: int) -> None:
+        self._value = value
+
+    def __index__(self) -> int:
+        v: int = self._value
+        self._value += 1
+        return v
+
+    @property
+    def value(self) -> int:
+        return self._value
 
 
 # CODE SEGMENT PART END.
@@ -1355,9 +1372,9 @@ def infix_to_postfix(infix: str) -> str:
             for k, v in priority_dictionary.items():
                 try:
                     op_priority[str(k)] = int(v)
-                except Exception:
+                except Exception:  # noqa
                     continue
-    except Exception:
+    except Exception:  # noqa
         op_priority = {}
 
     # Initializing...

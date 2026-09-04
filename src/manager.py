@@ -4,8 +4,6 @@ import os
 from queue import Queue
 from typing import Any
 
-from pygments.lexers import q
-
 from parsefunc.function import isinstance_loose
 from parseutil.structure import ConfigurationDataStandaloneSegmentStructure
 from src.parsecheck.logs import LogCatalogue, EmptyLogCatalogue
@@ -239,6 +237,11 @@ class ConfigurationManager(object):
 
     # CODE SEGMENT PART END.
     # endregion
+
+    def __getitem__(self, item: str) -> ConfigurationDataStandaloneSegmentStructure:
+        if self._master is not None:
+            return self._master.dictionary[item.lower()]  # noqa
+        raise KeyError(item)
 
 
 # CODE SEGMENT END.

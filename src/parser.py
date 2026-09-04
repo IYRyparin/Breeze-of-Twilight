@@ -4,7 +4,6 @@ from src.parseutil import kword as keyword
 from src.parseutil.structure import ConfigurationSignalStructure, ConfigurationDataStandaloneSegmentStructure
 from src.parsecheck.check import start_check, ReplacerDatabase
 from src.parseutil.column import *
-from src.parsefunc.function import Counter as CustomCounter
 
 
 # ----- SOURCE START -----
@@ -51,9 +50,6 @@ class ConfigurationStandalone(object):
         # Load some basic information from the string, and then we can start to parse the data's part.
         self._string_memory, self._basic_string = self._data_load_string(string=string)  # Save the string, make sure that it will not be broken in string-breaking part.
 
-        # A counter to get the correct string in the memory.
-        self._string_memory_counter: function.Counter = function.Counter(0)
-
         # Replace the '\n' into empty string, ready to start of the next part.
         self._basic_string = self._basic_string.lower()
 
@@ -67,7 +63,7 @@ class ConfigurationStandalone(object):
 
         # Parse title lines until databases-start keyword is encountered.
         for grammar_parse_index, grammar_parse_element in enumerate(self._origin_grammar_list):
-            words = grammar_parse_element.split()
+            words:         list[str] = grammar_parse_element.split()
 
             # Check the start signal, if it is, jump out the title parse to save time.
             if keyword.ConfigurationKeyword.KEYWORD_DATABASES_START in words or keyword.ConfigurationKeyword.KEYWORD_CONVERSION_START in words:
@@ -136,16 +132,14 @@ class ConfigurationStandalone(object):
             return parts
 
         # find the 'databases-start' keyword in the basic string
-        ds_idx = self._basic_string.find(keyword.ConfigurationKeyword.KEYWORD_DATABASES_START)
-        if ds_idx == -1:
-            raise SyntaxError('Cannot found the DATABASE division.')
-        brace_idx = self._basic_string.find('{', ds_idx)
-        if brace_idx == -1:
-            raise SyntaxError('Cannot found the DATABASE opening brace.')
-        match_idx = _find_matching_brace(self._basic_string, brace_idx)
-        block_content = self._basic_string[brace_idx+1: match_idx]
+        ds_idx:        int = self._basic_string.find(keyword.ConfigurationKeyword.KEYWORD_DATABASES_START)
+        brace_idx:     int = self._basic_string.find('{', ds_idx)
+        match_idx:     int = _find_matching_brace(self._basic_string, brace_idx)
+        block_content: str = self._basic_string[brace_idx + 1 : match_idx]       # noqa
+
         # split into top-level statements
-        db_statements = _split_top_level_statements(block_content)
+        db_statements: list[str] = _split_top_level_statements(block_content)
+
         # parse the database statements into dictionary
         self._data_load_databases(db_statements, self._dictionary)
 
@@ -163,7 +157,7 @@ class ConfigurationStandalone(object):
     # CODE SEGMENT PART START.
 
     @staticmethod
-    def _data_load_string(string: str) -> tuple[list[str], str]:
+    def _data_load_string(string: str) -> tuple[Queue[str], str]:
         """
         In here, this function is used to check and load the
         :return: list[str]
@@ -191,7 +185,7 @@ class ConfigurationStandalone(object):
             # noqa A special signal, used to replace the semicolon in string, because the semicolon is used to split the grammar, so we need to replace it into another safe value.
             elif char == ";" and string_signal:
                 # Replace semicolon inside string with placeholder to avoid splitting grammar by it
-                basic_string += "\uFFFE"
+                basic_string += "\uFFFE"    # noqa
                 continue
 
             # When we find the announcement signal, we need to change the signal to True, and then we can start to drop the announcement part.
@@ -226,7 +220,7 @@ class ConfigurationStandalone(object):
         # +----------------------------+----------------------+-----------------------+----------------------+
         _is_string_signal:              bool                  = False                  # A boolean signal which used to explain this part is in string or not.
         _temp_memory_string:            str                   = ""                     # A temp value, used to save the string.
-        _temp_memory_string_saver:      list[str]             = []                     # We need to save the string, or it will be breaked.
+        _temp_memory_string_saver:      Queue[str]            = Queue()                # We need to save the string, or it will be breaked.
         # +----------------------------+----------------------+-----------------------+----------------------+
 
         # ----- CONDITION SEGMENT -----
@@ -247,7 +241,7 @@ class ConfigurationStandalone(object):
                         _temp_memory_string = _temp_memory_string.replace(key, value)
 
                     # After the replacement, we can save it and clear the buffer now.
-                    _temp_memory_string_saver.append(_temp_memory_string)  # Append the string into list to save it.
+                    _temp_memory_string_saver.put(_temp_memory_string)  # Append the string into queue to save it.
                     _temp_memory_string = ""  # Flush the temp string for prepare to the next string value.
 
             # If it is in the string, we need to start to push the string into the saving value.
@@ -286,7 +280,7 @@ class ConfigurationStandalone(object):
         # Match and check the value.
         match title_configuration_describe:
             case keyword.ConfigurationKeyword.KEYWORD_CONFIGURE_ID:  # Load configuration id, get the id's string from string's memory.
-                self.CONFIGURATION_ID = self._string_memory[self._string_memory_counter]
+                self.CONFIGURATION_ID = self._string_memory.get()
 
             # Load configuration version into the value.
             case keyword.ConfigurationKeyword.KEYWORD_CONFIGURE_VERSION:
@@ -294,11 +288,11 @@ class ConfigurationStandalone(object):
 
             # Load configuration's readonly info into the value.
             case keyword.ConfigurationKeyword.KEYWORD_CONFIGURE_READONLY:
-                self.CONFIGURATION_READONLY = DatabasesSegmentValueChecker.boolean_parser(title_configuration_value)
+                self.CONFIGURATION_READONLY = DatabasesSegmentValueChecker.boolean_parser(title_configuration_value, None)
 
             # Load configurations encode info into the value.
             case keyword.ConfigurationKeyword.KEYWORD_CONFIGURE_ENCODE:
-                self.CONFIGURATION_ENCODE = self._string_memory[self._string_memory_counter]
+                self.CONFIGURATION_ENCODE = self._string_memory.get()
 
     # CODE SEGMENT PART END.
     # endregion
@@ -317,11 +311,11 @@ class ConfigurationStandalone(object):
 
     @staticmethod
     def _find_matching_brace_static(s: str, start_idx: int) -> int:
-        string_mode = False
-        i = start_idx
-        depth = 0
+        string_mode: bool = False
+        i: int = start_idx
+        depth: int = 0
         while i < len(s):
-            ch = s[i]
+            ch: str = s[i]
             if ch == '"' and (i == 0 or s[i-1] != '\\'):
                 string_mode = not string_mode
             if not string_mode:
@@ -336,11 +330,13 @@ class ConfigurationStandalone(object):
 
     @staticmethod
     def _split_top_level_statements_static(s: str) -> list:
-        parts = []
-        buf = ''
-        string_mode = False
-        depth = 0
-        i = 0
+        parts:       list[str] = []
+        buf:         str = ''
+        string_mode: bool = False
+        depth:       int = 0
+        i:           int = 0
+
+        # Start the loop to check the ';' to split sentence in here.
         while i < len(s):
             ch = s[i]
             if ch == '"' and (i == 0 or s[i-1] != '\\'):
@@ -371,9 +367,8 @@ class ConfigurationStandalone(object):
         :param load_data: list[str]
         :return: None
         """
-        type_checker:       DatabasesSegmentTypeChecker = DatabasesSegmentTypeChecker()
         element_data_index: int                         = 0
-        element_data_item:  str                         = ""
+        element_data_item:  str
 
         # Start the loop and check the data.
         while element_data_index < len(load_data):
@@ -387,19 +382,19 @@ class ConfigurationStandalone(object):
             # +----------------+--------------------------------------------+-------------------------------------------------+--------------------------------------+
             # |      NAME      |                   TYPE                     |                      VALUE                      |                 EXPLAIN              |
             # +----------------+--------------------------------------------+-------------------------------------------------+--------------------------------------+
-            segment_structure:  ConfigurationDataStandaloneSegmentStructure = ConfigurationDataStandaloneSegmentStructure()
-            temp_string_memory: str                                         = ""
-            store_start_index:  int                                         = 0
-            store_end_index:    int
+            segment_structure:  ConfigurationDataStandaloneSegmentStructure = ConfigurationDataStandaloneSegmentStructure()    # A structure which used to save the final data.
+            temp_string_memory: str                                         = ""                                               # Save the string temporary.
+            store_start_index:  int                                         = 0                                                # Save the start index of the section in the sentence.
+            store_end_index:    int                                                                                            # Save the end index of the section in the sentence.
             # +----------------+--------------------------------------------+-------------------------------------------------+--------------------------------------+
 
             # Load some initialize value and prepare for the loop.
-            element = element_data_item.lstrip()
-            leading_offset = len(element_data_item) - len(element)
+            element: str = element_data_item.lstrip()
+            leading_offset: int = len(element_data_item) - len(element)
 
             # Start next loop and check the value. We can check the name part.
             for column_index, column_char in enumerate(element):
-                if column_char in "abcdefghijklmnopqrstuvwxyz-_1234567890":
+                if column_char in LEGAL_STRING_WORD:
                     temp_string_memory += column_char
 
                 # After that, we can start to search the end signal of the data.
@@ -422,10 +417,15 @@ class ConfigurationStandalone(object):
 
             # Start to search the type's limit in here.
             store_end_index = element_data_item.find("=", store_start_index)
+            type_checker: DatabasesSegmentTypeChecker = DatabasesSegmentTypeChecker()
 
             # Start to search the end signal of the type, means ']'.
             while element_data_item[store_end_index] != ']':
                 store_end_index -= 1
+
+                # Check the index, make sure it is in the correct part.
+                if store_end_index < 0:
+                    raise ValueError("Invalid format: Missing closing bracket ']'")
 
             # Start to check the value in here.
             temp_load: str = element_data_item[store_start_index : store_end_index]  # noqa
@@ -433,11 +433,11 @@ class ConfigurationStandalone(object):
 
             # if sub index is -1, means that we don't need to care about the angle bracket.
             if sub_index == -1:
-                segment_structure._probable_type = type_checker.dict_checker(temp_load)(temp_load)  # noqa
+                segment_structure._probable_type = type_checker.dict_checker(temp_load)(temp_load, self._string_memory)  # noqa
 
             # Or anything else, we need to change a little.
             else:
-                segment_structure._probable_type = type_checker.dict_checker(temp_load[ : sub_index])(temp_load)  # noqa
+                segment_structure._probable_type = type_checker.dict_checker(temp_load[ : sub_index])(temp_load, self._string_memory)  # noqa
 
             # Add the edge signal, prepare for keyword checker.
             store_end_index += 1
@@ -448,7 +448,7 @@ class ConfigurationStandalone(object):
                 store_end_index += 1
 
             # Get the edge, load and check this value is constant or mutable.
-            modify_string_part: str = element_data_item[store_start_index: store_end_index].strip()
+            modify_string_part: str = element_data_item[store_start_index : store_end_index].strip()  # noqa
 
             # In here, start to check the constant status.
             if modify_string_part == keyword.ConfigurationDataExecutiveKeyword.EXECUTIVE_KEYWORD_CONST:
@@ -480,11 +480,11 @@ class ConfigurationStandalone(object):
             except IndexError:
                 extension_require = False
 
-            # At finally, so we can just load the value part into the parser.
-            finally:
-                value_string_part: str = element_data_item[store_start_index : store_end_index + 1]  # noqa
+            # At finally, start to input the value into the structure.
+            finally:  # When no extension require, it points to the end of the string. But then it has, it points to the place where '-' signal occurred, so we need to care about this.
+                value_string_part: str = element_data_item[store_start_index : store_end_index + int(not extension_require)]  # noqa
                 segment_structure._value_origin = value_string_part
-                rhs_value = value_string_part.strip()
+                rhs_value: str = value_string_part.strip()
 
                 # Search the null keyword, and replace it into the other part of value.
                 temp_list: list[str] = rhs_value.split(" ")
@@ -509,24 +509,29 @@ class ConfigurationStandalone(object):
                 # CODE SEGMENT PART START.
 
                 if segment_structure.probable_type == ([dict], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN):
-                    # If the value contains an inline '{...}' block, extract inner statements and recurse.
                     inner_brace_idx = value_string_part.find('{')
+
+                    # If the value contains an inline '{...}' block, extract inner statements and recurse.
                     if inner_brace_idx != -1:
                         try:
                             inner_end = self._find_matching_brace_static(value_string_part, inner_brace_idx)
+
+                        # fallback: treat as empty dict.
                         except SyntaxError:
-                            # fallback: treat as empty dict
                             segment_structure._value = {}
+
+                        # Load value into the normal mode.
                         else:
                             inner_content = value_string_part[inner_brace_idx + 1: inner_end]
                             child_statements = self._split_top_level_statements_static(inner_content)
                             segment_structure._value = {}
-                            self._data_load_databases(child_statements, segment_structure._value)
+                            self._data_load_databases(child_statements, segment_structure.value)
+
+                    # no inline block — treat as empty dict.
                     else:
-                        # no inline block — treat as empty dict
                         segment_structure._value = {}
 
-                    # store parent dict node and move to next top-level element
+                    # store parent dict node and move to next top-level element.
                     base_dictionary[segment_structure.name] = segment_structure
                     element_data_index += 1
                     continue
@@ -545,7 +550,7 @@ class ConfigurationStandalone(object):
                 # CODE SEGMENT PART START.
 
                 elif segment_structure.probable_type[1] == TypeExplainFormatter.LIST_TYPE_EXPLAIN:
-                    store_start_index, store_end_index = complex_type_angle_brackets_check(
+                    store_start_index, store_end_index = brackets_edge_index_checker(
                         dat_info_string=value_string_part,
                         right_move=0,
                         left_bracket='[',
@@ -578,14 +583,23 @@ class ConfigurationStandalone(object):
 
                     # single simple type, parse RHS.
                     if parser_func is None:
-                        segment_structure._value = complex_data_type_checker(value_string_part)[0]
+                        ldr_value: Any = complex_data_type_checker(value_string_part)[0]
+                        segment_structure._value = self._string_memory.get() if isinstance(ldr_value, str) else ldr_value
 
                     # Or else, just load it with normal mode.
                     else:
-                        segment_structure._value = parser_func(value_string_part)
+                        segment_structure._value = parser_func(value_string_part, self._string_memory)
 
                 # CODE SEGMENT PART END.
                 # endregion
+
+            # Start to check the extension require part.
+            if extension_require:
+                self._data_load_extension(
+                    segment_structure_item=segment_structure,
+                    load_data=element_data_item[store_end_index + 2 : ],  # noqa
+                    data_type=segment_structure.probable_type[0][0] if len(segment_structure.probable_type[0]) == 1 else Any
+                )
 
             # After that, all is ok, so we can just input it into the dictionary.
             base_dictionary[segment_structure.name] = segment_structure
@@ -599,8 +613,8 @@ class ConfigurationStandalone(object):
         :return: list[str]
         """
         final_saving_list: list[ConfigurationDataStandaloneSegmentStructure] = []
-        type_counter:      CustomCounter                                     = CustomCounter(0)
-        index_counter:     CustomCounter                                     = CustomCounter(0)
+        type_counter:      function.Counter                                  = function.Counter(0)
+        index_counter:     function.Counter                                  = function.Counter(0)
         string_signal:     bool                                              = False
         temp_data:         str                                               = ""
         block_counter:     int                                               = 0
@@ -615,7 +629,7 @@ class ConfigurationStandalone(object):
 
                 # Check the string signal, get the string and put it into the temp memory.
                 if not string_signal:
-                    temp_data = self._string_memory[self._string_memory_counter]  # Because this string may have been broken, so load from memory to change it.
+                    temp_data = self._string_memory.get()  # Because this string may have been broken, so load from memory to change it.
                     continue
 
             # Start to check the data's terminate signal.
@@ -624,7 +638,7 @@ class ConfigurationStandalone(object):
                 temp_data = temp_data.strip()
 
                 # Initialize the structure.
-                segment_structure.name          = str(index_counter)
+                segment_structure.name          = str(int(index_counter))
                 segment_structure.changeable    = father_mutable
                 segment_structure._value_origin = temp_data
 
@@ -670,24 +684,60 @@ class ConfigurationStandalone(object):
         # Finally, we can return it.
         return final_saving_list
 
-    # Parse the value with return mode.
-    @staticmethod
-    def _data_load_return(load_data: str) -> Any:
-        clearly_data: str = load_data.strip()[6 : ]  # noqa
-        data_index:   int = 0
+    def _data_load_extension(self,
+                             segment_structure_item: ConfigurationDataStandaloneSegmentStructure,
+                             load_data: str,
+                             data_type: type) -> None:
+        """
 
-        # Start the next time of parse.
-        while data_index < len(clearly_data) and clearly_data[data_index] == " ":
-            data_index += 1
+        :param load_data: str
+        :param data_type: type
+        :param segment_structure_item: ConfigurationDataStandaloneSegmentStructure
+        :return: None
+        """
+        extension_index:   int                                    = 0
+        temp_string:       str                                    = ""
+        explain_info:      list[tuple[Any, c_uint8]]              = []
+        extension_char:    str
 
-        # Load and check the value.
-        data_list: list[str] = clearly_data[data_index : ].split()  # noqa
+        # Start the range to check the extension regular.
+        while extension_index < len(load_data):
+            extension_char = load_data[extension_index]  # Push the char into the temp memory.
 
-        # Search and replace or mark the special call segment.
-        ...  # TODO: In here need to be fixed.
+            # Check the terminate signal.
+            if extension_char == "(":
+                extend_end_index: int = first_signal_edge_checker(load_data[extension_index : ], "(", ")") + extension_index  # noqa
 
-    def _data_load_extension(self, load_data: str) -> None:
-        ...
+                # Start to check the first edge in here.
+                match temp_string.strip():
+                    case ConfigurationExtensionKeyword.EXECUTIVE_KEYWORD_LIMIT:  # Limit rule.
+                        explain_info: list[tuple[Any, ctypes.c_uint8]] = DatabaseSegmentExtensionRequireChecker().limit_rule_explain(
+                            dat_info_string=load_data[extension_index + 1 : extend_end_index],  # noqa
+                            value_type=data_type,
+                            string_saving_memory=self._string_memory
+                        )
+
+                    # String regular checker.
+                    case ConfigurationExtensionKeyword.EXECUTIVE_KEYWORD_REGULAR:
+                        explain_info: list[tuple[Any, ctypes.c_uint8]] = DatabaseSegmentExtensionRequireChecker().regular_rule_explain(
+                            dat_info_string=load_data[extension_index + 1 : extend_end_index],  # noqa
+                            string_saving_memory=self._string_memory
+                        )
+
+                    # Or anything don't supported, raise the Exception.
+                    case _:
+                        raise IndexError("Unsupported explain code: " + temp_string.strip())
+
+                # Load the rule into the structure.
+                segment_structure_item.limit_value_list.extend(explain_info)
+
+                # Finally, jump out to the next index.
+                extension_index = extend_end_index + 1
+
+            # Or anything else, just increase the index.
+            else:
+                temp_string += extension_char
+                extension_index += 1
 
     def _data_load_conversion(self, load_data: list[str]) -> None:
         """
@@ -695,11 +745,12 @@ class ConfigurationStandalone(object):
         :param load_data: list[str]
         :return: None
         """
-        ...
+        pass  # TODO: Fix the conversion parsing part.
 
     @property
     def dictionary(self):
         return self._dictionary
+
 
 # CONFIGURATION PARSER CODE SEGMENT END.
 # endregion
