@@ -1,5 +1,6 @@
 # -*- CUSTOM FUNCTION LIST -*-
 
+import gc
 import types
 import typing
 from decimal import Decimal
@@ -273,11 +274,19 @@ class ConversionDecimal(object):
 
     def auto_changer(self) -> Decimal:
         if isinstance(self._number, str):
-            match self._number[0 : 2]:  # noqa
-                case "0b": return Decimal(self.bin_to_dec())
-                case "0o": return Decimal(self.oct_to_dec())
-                case "0x": return Decimal(self.hex_to_dec())
-                case _:    return Decimal(self._number)  # noqa
+            prefix = self._number[0:2].lower()
+            if prefix in ("0b", "0o", "0x"):
+                # strip prefix before delegating to specific converters
+                body = self._number[2:]
+                if prefix == "0b":
+                    return Decimal(ConversionDecimal(body).bin_to_dec())
+                if prefix == "0o":
+                    return Decimal(ConversionDecimal(body).oct_to_dec())
+                if prefix == "0x":
+                    return Decimal(ConversionDecimal(body).hex_to_dec())
+
+            # fallback: try parse as a plain decimal string
+            return Decimal(self._number)
 
         return Decimal(self._number)
 
@@ -356,16 +365,16 @@ class ConversionDecimal(object):
 
         # After the basic checking, we can start to change the number system.
         # Before to change it, we need to initialize some value at first.
-        final_decimal: Decimal = Decimal(0.0)
-        countdown:     int     = len(self._number.split(".")[0]) - 1
-        temp_int:      int
+        final_decimal: Decimal = Decimal(0)
+        countdown: int = len(self._number.split(".")[0]) - 1
+        temp_int: int
 
         # After that, we can start to change it. That's not complex, we just follow the hexadecimal's rule to do it at all.
         for decimal_char in self._number:
             if decimal_char == ".":
                 continue  # Drop out the dot character.
 
-            # Because hexadecimal is larger to normal number, so in here, we need to build some special rule.
+            # Because hexadecimal uses letters for values above 9, map them to integers.
             if ord(decimal_char) > ord('9'):
                 match decimal_char:
                     case 'A': temp_int = 10
@@ -376,12 +385,14 @@ class ConversionDecimal(object):
                     case 'F': temp_int = 15
                     case _: raise TypeError("Invalid hexadecimal number.")
 
-            # Anything else, means it not in the special part, so we can parse it normally.
+            # Anything else, parse it normally as a digit.
             else:
                 temp_int = int(decimal_char)
 
-            # Merge the value into the final decimal.
-            final_decimal += Decimal(temp_int * (16 ** countdown))
+            # Merge the value into the final decimal using Decimal arithmetic.
+            # countdown may become negative for fractional digits which produces the correct fractional weight.
+            final_decimal += Decimal(temp_int) * (Decimal(16) ** countdown)
+            countdown -= 1
 
         # Finally, we can return it.
         return final_decimal
@@ -811,153 +822,6 @@ class ConversionDecimal(object):
 
     # CODE SEGMENT PART END.
     # endregion
-
-
-"""
-class Counter(object):
-    def __init__(self, value: int = 0) -> None:
-        self._value = value
-
-    def _get_and_inc(self) -> int:
-        v = self._value
-        self._value += 1
-        return v
-
-    # ---- 转换方法 ----
-    def __int__(self) -> int:
-        return self._get_and_inc()
-
-    def __float__(self) -> float:
-        return float(self._get_and_inc())
-
-    def __index__(self) -> int:
-        return self._get_and_inc()
-
-    def __str__(self) -> str:
-        return str(self._get_and_inc())
-
-    def __repr__(self) -> str:
-        return repr(self._get_and_inc())
-
-    def __bool__(self) -> bool:
-        return bool(self._get_and_inc())
-
-    # ---- 二元算术运算 ----
-    def _get_other(self, other):  # noqa
-        if isinstance(other, Counter):
-            return other._get_and_inc()
-        return other
-
-    def __add__(self, other):
-        return self._get_and_inc() + self._get_other(other)
-
-    def __radd__(self, other):
-        return self._get_other(other) + self._get_and_inc()   # 右操作数时，只有 self 参与，other 不作为操作数被“调用”
-
-    def __sub__(self, other):
-        return self._get_and_inc() - self._get_other(other)
-
-    def __rsub__(self, other):
-        return self._get_other(other) - self._get_and_inc()
-
-    def __mul__(self, other):
-        return self._get_and_inc() * self._get_other(other)
-
-    def __rmul__(self, other):
-        return self._get_other(other) * self._get_and_inc()
-
-    def __truediv__(self, other):
-        return self._get_and_inc() / self._get_other(other)
-
-    def __rtruediv__(self, other):
-        return self._get_other(other) / self._get_and_inc()
-
-    def __floordiv__(self, other):
-        return self._get_and_inc() // self._get_other(other)
-
-    def __rfloordiv__(self, other):
-        return self._get_other(other) // self._get_and_inc()
-
-    def __mod__(self, other):
-        return self._get_and_inc() % self._get_other(other)
-
-    def __rmod__(self, other):
-        return self._get_other(other) % self._get_and_inc()
-
-    def __pow__(self, other, modulo=None):
-        if modulo is None:
-            return pow(self._get_and_inc(), self._get_other(other))
-        return pow(self._get_and_inc(), self._get_other(other), modulo)
-
-    def __rpow__(self, other, modulo=None):
-        if modulo is None:
-            return pow(self._get_other(other), self._get_and_inc())
-        return pow(self._get_other(other), self._get_and_inc(), modulo)
-
-    # 位运算（略，可按相同模式添加）
-    def __lshift__(self, other):
-        return self._get_and_inc() << self._get_other(other)
-
-    def __rshift__(self, other):
-        return self._get_and_inc() >> self._get_other(other)
-
-    def __and__(self, other):
-        return self._get_and_inc() & self._get_other(other)
-
-    def __xor__(self, other):
-        return self._get_and_inc() ^ self._get_other(other)
-
-    def __or__(self, other):
-        return self._get_and_inc() | self._get_other(other)
-
-    # ---- 比较运算 ----
-    def __eq__(self, other):
-        return self._get_and_inc() == self._get_other(other)
-
-    def __ne__(self, other):
-        return self._get_and_inc() != self._get_other(other)
-
-    def __lt__(self, other):
-        return self._get_and_inc() < self._get_other(other)
-
-    def __le__(self, other):
-        return self._get_and_inc() <= self._get_other(other)
-
-    def __gt__(self, other):
-        return self._get_and_inc() > self._get_other(other)
-
-    def __ge__(self, other):
-        return self._get_and_inc() >= self._get_other(other)
-
-    # ---- 一元运算 ----
-    def __neg__(self):
-        return -self._get_and_inc()
-
-    def __pos__(self):
-        return +self._get_and_inc()
-
-    def __abs__(self):
-        return abs(self._get_and_inc())
-
-    def __invert__(self):
-        return ~self._get_and_inc()
-
-    # ---- 增强赋值（原地操作） ----
-    # 增强赋值会修改自身，应直接操作 _value 而不触发额外的自增
-    def __iadd__(self, other):
-        if isinstance(other, Counter):
-            self._value += other._get_and_inc()   # 注意：other 会自增，但 self 不会额外自增
-        else:
-            self._value += other
-        return self
-
-    def __isub__(self, other):
-        if isinstance(other, Counter):
-            self._value -= other._get_and_inc()
-        else:
-            self._value -= other
-        return self
-"""
 
 
 class Counter(object):
@@ -1536,6 +1400,128 @@ def infix_to_postfix(infix: str) -> str:
 
     # So finally, we can return it.
     return final_saving_string
+
+
+def infix_to_postfix_string(infix: str) -> list[str | int]:
+    """
+    将中缀表达式（包含用双引号包裹的字符串字面量以及整数）转换为后缀（逆波兰）形式。
+
+    说明：
+    - 字符串字面量必须被双引号包围，且双引号前若有未被转义的反斜杠则视为转义（例如: "\"" 表示包含引号的字符串）。
+    - 忽略空白字符。
+    - 支持运算符：+（字符串连接，默认两边为字符串），*（重复：左边为字符串，右边为整数），以及小括号 ()。
+    - 优先级：括号 > * > +。所有运算按左结合处理。
+
+    返回：后缀表达式的 token 列表，字符串以 Python 字符串形式（去掉外层双引号并处理转义），数字为 int，运算符为字符串 '+' 或 '*'.
+    """
+
+    # helper: tokenize
+    tokens: list[object] = []  # elements: str (string literal or operator) or int
+    i = 0
+    n = len(infix)
+    while i < n:
+        ch = infix[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == '"':
+            # parse string literal, handling escapes
+            i += 1
+            sb = []
+            while i < n:
+                c = infix[i]
+                if c == '\\' and i + 1 < n:
+                    # include escaped char as-is (support \", \\ and others)
+                    i += 1
+                    sb.append(infix[i])
+                    i += 1
+                    continue
+                if c == '"':
+                    i += 1
+                    break
+                sb.append(c)
+                i += 1
+            tokens.append(''.join(sb))
+            continue
+        if ch == '(' or ch == ')':
+            tokens.append(ch)
+            i += 1
+            continue
+        # operators + and *
+        if ch in '+*':
+            tokens.append(ch)
+            i += 1
+            continue
+        # numbers (integer)
+        if ch.isdigit():
+            j = i
+            while j < n and infix[j].isdigit():
+                j += 1
+            num = int(infix[i:j])
+            tokens.append(num)
+            i = j
+            continue
+        # unknown character: treat as token (put into tokens as single-char string)
+        tokens.append(ch)
+        i += 1
+
+    # shunting-yard to produce postfix
+    out: list[object] = []
+    ops: list[str] = []
+    prec = {'+': 1, '*': 2}
+
+    for t in tokens:
+        if isinstance(t, str) and t not in ('+', '*', '(', ')'):
+            # string literal
+            out.append(t)
+            continue
+        if isinstance(t, int):
+            out.append(t)
+            continue
+        if t == '(':
+            ops.append(t)
+            continue
+        if t == ')':
+            while ops and ops[-1] != '(':
+                out.append(ops.pop())
+            if ops and ops[-1] == '(':
+                ops.pop()
+            continue
+        # operator
+        if t in prec:
+            while ops and ops[-1] in prec and prec[ops[-1]] >= prec[t]:
+                out.append(ops.pop())
+            ops.append(t)
+            continue
+        # fallback: push as output
+        out.append(t)
+
+    while ops:
+        out.append(ops.pop())
+
+    return out
+
+# CODE SEGMENT END.
+# endregion
+#
+# ----- SEPARATING LINE -----
+#
+# IDENTIFICATION GLOBAL CLASS. TO >>> OTHER ASSIST FUNCTION.
+#
+# region
+# INTRODUCE SENTENCE.
+# ->
+# ->
+# ->
+#
+# CODE SEGMENT START.
+
+
+def get_object_by_id(obj_id):
+    for obj in gc.get_objects():
+        if id(obj) == obj_id:
+            return obj
+    return None
 
 
 # CODE SEGMENT END.
