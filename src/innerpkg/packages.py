@@ -23,27 +23,27 @@ CHECKING_DICTIONARY: Final[dict[str, Any]] = {
     # |           KEY             |                VALUE                  |
     # +---------------------------+---------------------------------------+
     # Those value is used to check the method's name and return the correct value. Because those method is used by configuration, so I need to make sure that those method is correct and can be called by configuration.
-    "GetCurrentTime":               lambda: get_current_time(),
-    "GetCurrentYear":               lambda: get_current_time("year"),
-    "GetCurrentMonth":              lambda: get_current_time("month"),
-    "GetCurrentDay":                lambda: get_current_time("day"),
-    "GetCurrentHour":               lambda: get_current_time("hour"),
-    "GetCurrentMinute":             lambda: get_current_time("minute"),
-    "GetCurrentSecond":             lambda: get_current_time("second"),
+    "getcurrenttime":               lambda: get_current_time(),                         # noqa
+    "getcurrentyear":               lambda: get_current_time("year"),                   # noqa
+    "getcurrentmonth":              lambda: get_current_time("month"),                  # noqa
+    "getcurrentday":                lambda: get_current_time("day"),                    # noqa
+    "getcurrenthour":               lambda: get_current_time("hour"),                   # noqa
+    "getcurrentminute":             lambda: get_current_time("minute"),                 # noqa
+    "getcurrentsecond":             lambda: get_current_time("second"),                 # noqa
 
     # Those value is used to check the method's name and return the correct value. Because those method is used by configuration, so I need to make sure that those method is correct and can be called by configuration.
-    "GetLocalMachineIPV4":          lambda: get_system_ipv4(),
-    "GetLocalMachineIPV6":          lambda: get_system_ipv6(),
-    "GetLocalMachineMask":          lambda: get_system_mask(),
-    "GetLocalMachineGateway":       lambda: get_system_gateway(),
+    "getlocalmachineipv4":          lambda: get_system_ipv4(),                          # noqa
+    "getlocalmachineipv6":          lambda: get_system_ipv6(),                          # noqa
+    "getlocalmachinemask":          lambda: get_system_mask(),                          # noqa
+    "getlocalmachinegateway":       lambda: get_system_gateway(),                       # noqa
 
     # Those value is used to check the method's name and return the correct value. Because those method is used by configuration, so I need to make sure that those method is correct and can be called by configuration.
-    "GetLocalMachineMAC":           lambda: get_system_mac(),
-    "GetLocalMachineName":          lambda: get_local_machine_name(),
-    "GetLocalMachineFQDN":          lambda: get_local_machine_fqdn(),
-    "GetLocalMachineSystemName":    lambda: get_local_machine_system_name(),
-    "GetLocalMachineSystemVersion": lambda: get_local_machine_system_version(),
-    "GetLocalMachineSystemRelease": lambda: get_local_machine_system_release(),
+    "getlocalmachinemac":           lambda: get_system_mac(),                           # noqa
+    "getlocalmachinename":          lambda: get_local_machine_name(),                   # noqa
+    "getlocalmachinefqdn":          lambda: get_local_machine_fqdn(),                   # noqa
+    "getlocalmachinesystemname":    lambda: get_local_machine_system_name(),            # noqa
+    "getlocalmachinesystemversion": lambda: get_local_machine_system_version(),         # noqa
+    "getlocalmachinesystemrelease": lambda: get_local_machine_system_release(),         # noqa
     # +---------------------------+---------------------------------------+
 }
 
@@ -69,7 +69,7 @@ CHECKING_DICTIONARY: Final[dict[str, Any]] = {
 #
 # region
 # INTRODUCE SENTENCE.
-# -> TODO: CALL BY SPECIAL VALUE: GetCurrentTime、GetCurrentYear、GetCurrentMonth、GetCurrentDay、GetCurrentHour、GetCurrentMinute、GetCurrentSecond
+# -> CALL BY SPECIAL VALUE: GetCurrentTime、GetCurrentYear、GetCurrentMonth、GetCurrentDay、GetCurrentHour、GetCurrentMinute、GetCurrentSecond
 # -> Holy shit why I need to add those useless method's supported?
 #
 # DATA SEGMENT START.
@@ -190,7 +190,7 @@ def get_current_time(part: str = "default") -> str:
 #
 # CODE SEGMENT START.
 
-# TODO: CALL BY SPECIAL VALUE: GetLocalMachineIPV4
+# CALL BY SPECIAL VALUE: GetLocalMachineIPV4
 @lru_cache(maxsize=MAX_CACHE_VALUE)
 def get_system_ipv4() -> str:
     """
@@ -287,7 +287,7 @@ def get_system_mask() -> str:
         return "localhost"
 
 
-# TODO: CALL BY SPECIAL VALUE: GetLocalMachineGateway
+# CALL BY SPECIAL VALUE: GetLocalMachineGateway
 @lru_cache(maxsize=MAX_CACHE_VALUE)
 def get_system_gateway() -> str:
     """
@@ -331,7 +331,8 @@ def get_system_gateway() -> str:
 #
 # CODE SEGMENT START.
 
-# TODO: CALL BY SPECIAL VALUE: GetLocalMachineMAC
+
+# CALL BY SPECIAL VALUE: GetLocalMachineMAC
 @lru_cache(maxsize=MAX_CACHE_VALUE)
 def get_system_mac() -> str:
     """
@@ -356,7 +357,7 @@ def get_system_mac() -> str:
         return "localhost"
 
 
-# TODO: CALL BY SPECIAL VALUE: GetLocalMachineName
+# CALL BY SPECIAL VALUE: GetLocalMachineName
 @lru_cache(maxsize=MAX_CACHE_VALUE)
 def get_local_machine_name() -> str:
     """
@@ -372,7 +373,7 @@ def get_local_machine_name() -> str:
         return "localhost"
 
 
-# TODO: CALL BY SPECIAL VALUE: GetLocalMachineFQDN
+# CALL BY SPECIAL VALUE: GetLocalMachineFQDN
 @lru_cache(maxsize=MAX_CACHE_VALUE)
 def get_local_machine_fqdn() -> str:
     """

@@ -14,8 +14,9 @@ from typing import Final
 #
 # GLOBAL VALUE SEGMENT START.
 
-LEGAL_STRING_WORD: Final[str] = "abcdefghijklmnopqrstuvwxyz1234567890-_"
-STATUS_CHAR:       Final[str] = "_!"
+LEGAL_STRING_WORD: Final[str]     = "abcdefghijklmnopqrstuvwxyz1234567890-_"
+STATUS_CHAR:       Final[str]     = "_"
+CALCULATE_CHAR:    frozenset[str] = frozenset({"+", "-", "*", "/", "**", "//", "<<", ">>", "&", "|", "^"})
 
 
 class ConfigurationValueType:   # noqa
@@ -115,6 +116,7 @@ class ConfigurationDataExecutiveKeyword:   # noqa
     EXECUTIVE_KEYWORD_CONST:    Final[str] = "cst"          # To use this keyword, means you agree some value in the database can't be change and rewrite, and it will return an immutable value rather than a mutable value. Also, this is the default type in the configuration, so if you don't use the "mut" keyword, it will return an immutable value rather than a mutable value.
     EXECUTIVE_KEYWORD_SUMMARY:  Final[str] = "sum"          # When you need to summary some value in the configuration, you can use this keyword to realize it.
     EXECUTIVE_KEYWORD_TO:       Final[str] = "to"           # This is make sure easy to read, and separating the range of data.
+    EXECUTIVE_KEYWORD_CALL:     Final[str] = "call"         # When you need to call some function in the configuration, you can use this keyword to realize it.
     # +-----------------------+------------+---------------+--------------------------+
 
     def __list__(self) -> list[str]:
@@ -126,6 +128,7 @@ class ConfigurationDataExecutiveKeyword:   # noqa
             self.EXECUTIVE_KEYWORD_RETURN, self.EXECUTIVE_KEYWORD_MUTABLE,
             self.EXECUTIVE_KEYWORD_CONST, self.EXECUTIVE_KEYWORD_SUMMARY,
             self.EXECUTIVE_KEYWORD_COMPARE, self.EXECUTIVE_KEYWORD_TO,
+            self.EXECUTIVE_KEYWORD_CALL
         ]
 
 
@@ -155,6 +158,7 @@ class ConfigurationStatusExecutiveKeyword:   # noqa
     STATUS_EXEC_KEYWORD_NULL:    Final[str] = "null"       # You can use this keyword to keep some value empty, and it will return None when load the configuration file.
     STATUS_EXEC_KEYWORD_FORMAT:  Final[str] = "format"     # This is a placeholder keyword. When you need to use this, you can input the format string to change it (also CST is okay, but you cannot write down it.)
     STATUS_EXEC_KEYWORD_DEFAULT: Final[str] = "default"    # When set the rule, you can use this keyword to build an executive with default's sentence. Otherwise, if you try to push it into a value, please make sure this value is supported this method, or it will cause the error.
+    STATUS_EXEC_KEYWORD_EXCLUDE: Final[str] = "exclude"    # When set the rule, you can use this keyword to build an executive with excludes sentence. Otherwise, if you try to push it into a value, please make sure this value is supported this method, or it will cause the error.
     # +------------------------+------------+------------+--------------------------+
 
     def __list__(self) -> list[str]:
@@ -164,7 +168,8 @@ class ConfigurationStatusExecutiveKeyword:   # noqa
         """
         return [
             self.STATUS_EXEC_KEYWORD_TRUE, self.STATUS_EXEC_KEYWORD_FALSE,
-            self.STATUS_EXEC_KEYWORD_NULL
+            self.STATUS_EXEC_KEYWORD_NULL, self.STATUS_EXEC_KEYWORD_FORMAT,
+            self.STATUS_EXEC_KEYWORD_DEFAULT, self.STATUS_EXEC_KEYWORD_EXCLUDE
         ]
 # GLOBAL VALUE SEGMENT END.
 #
@@ -184,7 +189,8 @@ class ConfigurationStatusExecutiveKeyword:   # noqa
 #
 # GLOBAL VALUE SEGMENT START.
 
-class ConfigurationConversionKeyword(object):   # noqa
+
+class ConfigurationConversionKeyword(object):
     # +------------------------------+----------------+-----------------+-------------------------------------------+
     # |             NAME             |      TYPE      |     VALUE       |                   EXPLAIN                 |
     # +------------------------------+----------------+-----------------+-------------------------------------------+
@@ -206,6 +212,7 @@ class ConfigurationConversionKeyword(object):   # noqa
             self.WITH_KEYWORD_COUNTDOWN_CONVERSION, self.WITH_KEYWORD_VALUE_CONVERSION,
         ]
 
+
 # GLOBAL VALUE SEGMENT END.
 # 
 # IDENTIFICATION END.
@@ -214,7 +221,7 @@ class ConfigurationConversionKeyword(object):   # noqa
 # ----- SEPARATING LINE -----
 # 
 # region
-# IDENTIFICATION GLOBAL VALUE. TO >>> 
+# IDENTIFICATION GLOBAL VALUE. TO >>> EXTENSION KEYWORD SETTER.
 # 
 # INTRODUCE SENTENCE.
 # -> This file's part is used to
@@ -223,16 +230,44 @@ class ConfigurationConversionKeyword(object):   # noqa
 # 
 # GLOBAL VALUE SEGMENT START.
 
-class ConfigurationExtensionKeyword(object):  # noqa
+
+class ConfigurationExtensionKeyword(object):
     EXECUTIVE_KEYWORD_LIMIT:    Final[str] = "limit"        # When you need to limit the value of one part, you can use this keyword to realize it.
     EXECUTIVE_KEYWORD_REGULAR:  Final[str] = "regular"      # You can use this to match and compare the complex string with regular expression. It will return a NoneType value when never find target data.
 
     def __list__(self) -> list[str]:
         return [self.EXECUTIVE_KEYWORD_LIMIT, self.EXECUTIVE_KEYWORD_REGULAR]
 
+
 # GLOBAL VALUE SEGMENT END.
 # 
 # IDENTIFICATION END.
+# endregion
+#
+# ----- SEPARATING LINE -----
+#
+# IDENTIFICATION GLOBAL VALUE. TO >>> INNER PACKAGE VALUE.
+#
+# region
+# INTRODUCE SENTENCE.
+# ->
+# ->
+# ->
+#
+# CODE SEGMENT START.
+
+
+class ConfigurationInnerPackage(object):
+    INNER_PACKAGES:   Final[str] = "packages"
+    INNER_MATHMATICS: Final[str] = "mathmatics"
+
+    def __list__(self) -> list[str]:
+        return [
+            self.INNER_PACKAGES, self.INNER_MATHMATICS
+        ]
+
+
+# CODE SEGMENT END.
 # endregion
 #
 # ----- SOURCE END -----

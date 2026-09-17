@@ -1,14 +1,12 @@
 import math
-from queue import Queue
-from typing import Final, Any
 from functools import lru_cache
 from decimal import Decimal, getcontext
-from unittest import case
+
 
 # ----- SOURCE START -----
 
 # 配置默认精度（有效数字位数）
-DEFAULT_PREC = 50
+DEFAULT_PREC: int = 50
 getcontext().prec = DEFAULT_PREC
 
 # 最大允许的级数项数（防止计算过载）
@@ -83,7 +81,7 @@ def _reduce_angle(x: Decimal, pi: Decimal) -> Decimal:
     return x % two_pi
 
 
-def _compute_sin(x: Decimal, terms: int, pi: Decimal = None) -> Decimal:
+def _compute_sin(x: Decimal, terms: int, pi: Decimal | None = None) -> Decimal:
     """
     计算 sin(x) 的泰勒级数，共 terms 项
     若提供 pi，则先规约角度加速收敛

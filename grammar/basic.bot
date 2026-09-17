@@ -16,13 +16,14 @@ DATABASES-START;
         EXAMPLE_SIMPLE_CALCULATION [BOOL] CST = FALSE;
     };
     LOAD_STRING [STR] CST = "Hello World!";
-    LOAD-INT [INT] MUT = 1;
+    LOAD-INT [INT] MUT = 4+2+4+34 + FORMAT DEFAULT 6;
     LOAD-BOOL [BOOL] MUT = TRUE;
     RUN-COMP [FILE] CST = "./testW";
     PANE [STR] CST = "peokvmbokrgrgrgtwdfwrfrfftgtgyyjun";
-    VK-ANY [ANYTHING] CST = 0x01;
+    VK-FLT [FLOAT] CST = 0.5+0.4;
+    VK-ANY [ANYTHING] CST = 0x0A;
 
-    LOAD_LIMIT [INT] MUT = 0 -> LIMIT(1, 2, !5, !1_2);
+    LOAD_LIMIT [INT] MUT = 0 -> LIMIT(1, 2, EXCLUDE 5, EXCLUDE 1_2);
     LOAD_REGULAR [STR] MUT = "Hello!!!!!!!!!!!!!!!!" -> REGULAR("^ACPacp$");
 };
 DATABASES-END;

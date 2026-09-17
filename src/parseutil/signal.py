@@ -65,19 +65,20 @@ class TypeExplainFormatter:
 
 @dataclasses.dataclass(frozen=True)
 class ValueFormatter(object):
-    DEFAULT_EMPTY_FORMATTER:     ctypes.c_uint8 = ctypes.c_uint8(0x00)
+    DEFAULT_EMPTY_FORMATTER:          ctypes.c_uint8 = ctypes.c_uint8(0x00)
+    DEFAULT_EMPTY_MUTABLE_FORMATTER:  ctypes.c_uint8 = ctypes.c_uint8(0x01)
 
     # CALL WITH INT OR FLOAT VALUE.
-    DEFAULT_NUMBER_FORMATTER:    ctypes.c_uint8 = ctypes.c_uint8(0x10)
-    DEC_NUMBER_FORMATTER:        ctypes.c_uint8 = ctypes.c_uint8(0x11)
-    BIN_NUMBER_FORMATTER:        ctypes.c_uint8 = ctypes.c_uint8(0x12)
-    OCT_NUMBER_FORMATTER:        ctypes.c_uint8 = ctypes.c_uint8(0x13)
-    HEX_NUMBER_FORMATTER:        ctypes.c_uint8 = ctypes.c_uint8(0x14)
+    DEFAULT_NUMBER_FORMATTER:         ctypes.c_uint8 = ctypes.c_uint8(0x10)
+    DEC_NUMBER_FORMATTER:             ctypes.c_uint8 = ctypes.c_uint8(0x11)
+    BIN_NUMBER_FORMATTER:             ctypes.c_uint8 = ctypes.c_uint8(0x12)
+    OCT_NUMBER_FORMATTER:             ctypes.c_uint8 = ctypes.c_uint8(0x13)
+    HEX_NUMBER_FORMATTER:             ctypes.c_uint8 = ctypes.c_uint8(0x14)
 
     # CALL WITH STRING VALUE.
-    DEFAULT_STRING_FORMATTER:    ctypes.c_uint8 = ctypes.c_uint8(0x20)
-    FILE_STRING_FORMATTER:       ctypes.c_uint8 = ctypes.c_uint8(0x21)
-    REGULAR_STRING_FORMATTER:    ctypes.c_uint8 = ctypes.c_uint8(0x22)
+    DEFAULT_STRING_FORMATTER:         ctypes.c_uint8 = ctypes.c_uint8(0x20)
+    FILE_STRING_FORMATTER:            ctypes.c_uint8 = ctypes.c_uint8(0x21)
+    REGULAR_STRING_FORMATTER:         ctypes.c_uint8 = ctypes.c_uint8(0x22)
 
     # LIMIT EXPLAIN INPUT VALUE.
     DEFAULT_LIMIT_LIST_EXPLAIN:  ctypes.c_uint8 = ctypes.c_uint8(0xD0)

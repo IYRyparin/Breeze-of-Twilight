@@ -1,9 +1,8 @@
-from src.parseutil.kword import ConfigurationStatusExecutiveKeyword
+from src.parsecheck.check import start_check, ReplacerDatabase
 from src.parsefunc import function
 from src.parseutil import kword as keyword
-from src.parseutil.structure import ConfigurationSignalStructure, ConfigurationDataStandaloneSegmentStructure
-from src.parsecheck.check import start_check, ReplacerDatabase
 from src.parseutil.column import *
+from src.parseutil.structure import ConfigurationDataStandaloneSegmentStructure
 
 
 # ----- SOURCE START -----
@@ -22,7 +21,7 @@ from src.parseutil.column import *
 # -> So from that, I need to build a custom class to realize it.
 #
 # region
-# CONFIGURATION PARSER CODE SEGMENT START.
+# CODE SEGMENT START.
 
 
 class ConfigurationStandalone(object):
@@ -34,7 +33,6 @@ class ConfigurationStandalone(object):
     CONFIGURATION_VERSION:    float                                              = 0.0
     CONFIGURATION_ENCODE:     str                                                    = "utf-8"
     CONFIGURATION_READONLY:   bool                                                   = False
-    _basic_signal:            ConfigurationSignalStructure                           = ConfigurationSignalStructure()
     _dictionary:              dict[str, ConfigurationDataStandaloneSegmentStructure] = {}                              # This is the final grammar tree, which will be built and returned.
     # +----------------------+-------------------------------------------------------+-------------------------------+-----------------------------------+
 
@@ -45,12 +43,10 @@ class ConfigurationStandalone(object):
         So from that, I define a custom class to realize it.
         :param: string: str   Origin Code string.
         """
-        start_check(string=string)
+        start_check(string=string)  # Check there are any syntax error or not.
 
         # Load some basic information from the string, and then we can start to parse the data's part.
         self._string_memory, self._basic_string = self._data_load_string(string=string)  # Save the string, make sure that it will not be broken in string-breaking part.
-
-        # Replace the '\n' into empty string, ready to start of the next part.
         self._basic_string = self._basic_string.lower()
 
         # Initialize some value, and start to parse the data's part.
@@ -63,9 +59,7 @@ class ConfigurationStandalone(object):
 
         # Parse title lines until databases-start keyword is encountered.
         for grammar_parse_index, grammar_parse_element in enumerate(self._origin_grammar_list):
-            words:         list[str] = grammar_parse_element.split()
-
-            # Check the start signal, if it is, jump out the title parse to save time.
+            words: list[str] = grammar_parse_element.split()
             if keyword.ConfigurationKeyword.KEYWORD_DATABASES_START in words or keyword.ConfigurationKeyword.KEYWORD_CONVERSION_START in words:
                 break
 
@@ -367,7 +361,7 @@ class ConfigurationStandalone(object):
         :param load_data: list[str]
         :return: None
         """
-        element_data_index: int                         = 0
+        element_data_index: int = 0
         element_data_item:  str
 
         # Start the loop and check the data.
@@ -472,8 +466,6 @@ class ConfigurationStandalone(object):
                 while not (element_data_item[store_end_index + 1] == '>' and element_data_item[store_end_index] == '-' and not string_signal):
                     if element_data_item[store_end_index + 1] == "\"" and element_data_item[store_end_index] != "\\":
                         string_signal = not string_signal
-
-                    # Nothing need to care about, we can just continue.
                     store_end_index += 1
 
             # Get the exception, means that there don't have any extension require part, so we can just use full line.
@@ -485,8 +477,6 @@ class ConfigurationStandalone(object):
                 value_string_part: str = element_data_item[store_start_index : store_end_index + int(not extension_require)]  # noqa
                 segment_structure._value_origin = value_string_part
                 rhs_value: str = value_string_part.strip()
-
-                # Search the null keyword, and replace it into the other part of value.
                 temp_list: list[str] = rhs_value.split(" ")
 
                 # Start the loop. Search the special keyword and replace it.
@@ -513,23 +503,21 @@ class ConfigurationStandalone(object):
 
                     # If the value contains an inline '{...}' block, extract inner statements and recurse.
                     if inner_brace_idx != -1:
-                        try:
-                            inner_end = self._find_matching_brace_static(value_string_part, inner_brace_idx)
+                        try:  # Load into the normal mode.
+                            inner_end: int = self._find_matching_brace_static(value_string_part, inner_brace_idx)
+                            inner_content: str = value_string_part[inner_brace_idx + 1: inner_end]
+                            child_statements: list[str] = self._split_top_level_statements_static(inner_content)
+                            child_dictionary: dict[str, ConfigurationDataStandaloneSegmentStructure] = {}
+                            self._data_load_databases(child_statements, child_dictionary)
+                            segment_structure._value = [(child_dictionary, ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
 
-                        # fallback: treat as empty dict.
+                        # Fallback: return an empty dictionary.
                         except SyntaxError:
-                            segment_structure._value = {}
-
-                        # Load value into the normal mode.
-                        else:
-                            inner_content = value_string_part[inner_brace_idx + 1: inner_end]
-                            child_statements = self._split_top_level_statements_static(inner_content)
-                            segment_structure._value = {}
-                            self._data_load_databases(child_statements, segment_structure.value)
+                            segment_structure._value = [({}, ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
 
                     # no inline block — treat as empty dict.
                     else:
-                        segment_structure._value = {}
+                        segment_structure._value = [({}, ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
 
                     # store parent dict node and move to next top-level element.
                     base_dictionary[segment_structure.name] = segment_structure
@@ -559,11 +547,11 @@ class ConfigurationStandalone(object):
                     )
 
                     # Start to list the element.
-                    segment_structure._value = self._data_load_table(
-                        value_string_part[store_start_index + 1 : store_end_index],  # noqa
-                        segment_structure.probable_type[0],
-                        segment_structure.changeable
-                    )
+                    segment_structure._value = [(i, ValueFormatter.DEFAULT_EMPTY_FORMATTER) for i in self._data_load_table(
+                                                    value_string_part[store_start_index + 1:store_end_index],
+                                                    segment_structure.probable_type[0],
+                                                    segment_structure.changeable
+                                                )]
 
                 # CODE SEGMENT PART END.
                 # endregion
@@ -579,16 +567,20 @@ class ConfigurationStandalone(object):
                 # CODE SEGMENT PART START.
 
                 elif segment_structure.probable_type[1] == TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN:
-                    parser_func = value_checker.auto_check(segment_structure.probable_type[0][0].__name__)
+                    for type_item in segment_structure.probable_type[0]:
+                        parser_func = value_checker.auto_check(type_item.__name__)
+                        if parser_func is not None:
+                            segment_structure._value = parser_func(value_string_part, self._string_memory)
+                            break
 
-                    # single simple type, parse RHS.
-                    if parser_func is None:
-                        ldr_value: Any = complex_data_type_checker(value_string_part)[0]
-                        segment_structure._value = self._string_memory.get() if isinstance(ldr_value, str) else ldr_value
-
-                    # Or else, just load it with normal mode.
+                    # Single simple type, parse RHS.
                     else:
-                        segment_structure._value = parser_func(value_string_part, self._string_memory)
+                        ldr_value: Any = complex_data_type_checker(value_string_part)[0]
+                        segment_structure._value = [(ldr_value, ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
+
+                # Or anything else, means that this is an unknown signal, we need to raise the Exception.
+                else:
+                    raise TypeError(f"Unsupported signal: {segment_structure.probable_type[1]}")
 
                 # CODE SEGMENT PART END.
                 # endregion
@@ -646,16 +638,31 @@ class ConfigurationStandalone(object):
                 if isinstance(type_loader, list):
                     if temp_data.startswith("["): temp_data = temp_data[1 : ]   # noqa
                     if temp_data.endswith("]"):   temp_data = temp_data[ : -1]  # noqa
-                    segment_structure._value = self._data_load_table(temp_data, type_loader, father_mutable)  # Start next loop.
+                    segment_structure.value = [(self._data_load_table(temp_data, type_loader, father_mutable), ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
                     continue
 
                 # Or this value is a dict, so that we need to use dict loader.
                 elif type_loader == dict:
-                    if temp_data.startswith("{"): temp_data = temp_data[1 : ]   # noqa
-                    if temp_data.endswith("}"):   temp_data = temp_data[ : -1]  # noqa
-                    segment_structure._value = {}
-                    self._data_load_databases(temp_data.split(";"), segment_structure.value)
-                    continue
+                    inner_brace_idx: int = temp_data.find("{")
+                    if temp_data == -1:
+                        raise SyntaxError("Cannot find the start signal in database.")
+
+                    # Load into the normal mode.
+                    try:
+                        inner_end: int = self._find_matching_brace_static(temp_data, inner_brace_idx)
+                        inner_content: str = temp_data[inner_brace_idx + 1: inner_end]
+                        child_statements: list[str] = self._split_top_level_statements_static(inner_content)
+                        child_dictionary: dict[str, ConfigurationDataStandaloneSegmentStructure] = {}
+                        self._data_load_databases(child_statements, child_dictionary)
+                        segment_structure.value = [(child_dictionary, ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
+
+                    # Fallback: return an empty dictionary.
+                    except SyntaxError:
+                        segment_structure.value = [({}, ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
+
+                    # Finally, we can just continue.
+                    finally:
+                        continue
 
                 # Anything else, we can just start the normal checking.
                 value_checker: DatabasesSegmentValueChecker = DatabasesSegmentValueChecker(None, None)
@@ -665,9 +672,7 @@ class ConfigurationStandalone(object):
 
                 # If return None, we can start to complex check.
                 if value_load is None:
-                    segment_structure._value = complex_data_type_checker(temp_data)[0]  # noqa
-
-                # Or anything else, just load in normal mode.
+                    segment_structure._value = complex_data_type_checker(temp_data)[0]
                 else:
                     segment_structure._value = value_load(temp_data)
 
@@ -675,8 +680,8 @@ class ConfigurationStandalone(object):
                 final_saving_list.append(segment_structure)
 
             # When we meet the block, we need to change the counter.
-            elif table_data_char == "[": block_counter += 1  # noqa
-            elif table_data_char == "]": block_counter -= 1  # noqa
+            elif table_data_char == "[" and not string_signal: block_counter += 1  # noqa
+            elif table_data_char == "]" and not string_signal: block_counter -= 1  # noqa
 
             # Or anything else, we can just add it into the string.
             temp_data += table_data_char
@@ -752,7 +757,7 @@ class ConfigurationStandalone(object):
         return self._dictionary
 
 
-# CONFIGURATION PARSER CODE SEGMENT END.
+# CODE SEGMENT END.
 # endregion
 #
 # ----- SEPARATING LINE -----
