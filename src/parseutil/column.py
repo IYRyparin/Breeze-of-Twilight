@@ -1019,7 +1019,7 @@ class DatabaseSegmentExtensionRequireChecker(object):
                 # Check the value's prefix to understand what it's mean.
                 if temp_string_memory.startswith(ConfigurationStatusExecutiveKeyword.STATUS_EXEC_KEYWORD_EXCLUDE):
                     prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHOUT_VALUE
-                    temp_string_memory = temp_string_memory[7:]  # TODO: In here, need to support more formatter.
+                    temp_string_memory = temp_string_memory[7:]
                 else:
                     prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHIN_VALUE
 
