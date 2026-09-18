@@ -4,8 +4,11 @@ import os
 from queue import Queue
 from typing import Any
 
-from parsefunc.function import isinstance_loose
-from parseutil.structure import ConfigurationDataStandaloneSegmentStructure
+from queue import Queue
+from typing import Any
+
+from src.parsefunc.function import isinstance_loose
+from src.parseutil.structure import ConfigurationDataStandaloneSegmentStructure
 from src.parsecheck.logs import LogCatalogue, EmptyLogCatalogue
 from src.parser import ConfigurationStandalone
 
@@ -175,62 +178,84 @@ class ConfigurationManager(object):
 
         # Start to initialize some value in here, prepare for the search.
         queue_loader: Queue = Queue()
-        temp_queue:   Queue = Queue()
+
+        # CRITICAL: the traversal must be guarded against revisiting a value it already walked.
+        # The previous version pushed the item it had just popped straight back into the same
+        # queue whenever the shape was not recognised, which is an endless loop, and a node
+        # reachable from several parents was visited over and over again too.
+        visited: set[int] = set()
+
+        def enqueue(target: Any) -> None:
+            """
+            Register one node for the breadth first walk.
+
+            :param target: Any    Structure whose `.value` may hold nested children.
+            :return: None
+            """
+            if target is None or id(target) in visited:
+                return
+            visited.add(id(target))
+            queue_loader.put(target)
+
+        def explore_container(container: Any) -> None:
+            """
+            Push every nested dictionary / list reachable from `container` into the walk.
+
+            :param container: Any    Value coming from a segment.
+            :return: None
+            """
+            stack: list[Any] = [container]
+            while stack:
+                item: Any = stack.pop()
+
+                if isinstance_loose(item, ConfigurationDataStandaloneSegmentStructure):
+                    enqueue(item)
+                    continue
+
+                if isinstance_loose(item, dict):
+                    enqueue(item)
+                    continue
+
+                if isinstance_loose(item, list) or isinstance_loose(item, tuple):
+                    # A plain list/tuple is only walked; it never goes back into the BFS with the
+                    # same identity twice, so the walk always terminates.
+                    if id(item) in visited:
+                        continue
+                    visited.add(id(item))
+                    stack.extend(item)
 
         # Push the first level's value into the searching queue.
         for structure_item in self._origin_list:
             for configuration_key, configuration_value in structure_item.structure_pointer.dictionary.items():
                 if configuration_key in args:
                     final_saving_list.append(configuration_value)
+                    continue
 
-                # Check and load the special type in here, load it into the queue.
-                elif isinstance_loose(configuration_value.value, dict):
-                    queue_loader.put(configuration_value)
-
-                # Check the changeable list.
-                elif isinstance_loose(configuration_value.value, list):
-                    temp_queue.put(configuration_value)
-
-                    # Start the list's range.
-                    while not temp_queue.empty():
-                        temp_item: list[Any] = temp_queue.get()
-
-                        # Check the data in list, push the list into the queue.
-                        if isinstance_loose(temp_item, list):
-                            temp_queue.put(temp_item)
-
-                        # Or anything else, push the dict into the queue.
-                        elif isinstance_loose(temp_item, dict):
-                            queue_loader.put(temp_item)
+                enqueue(configuration_value)
 
         # Start the loop and check the value in here.
         while not queue_loader.empty():
-            queue_loader_structure: ConfigurationDataStandaloneSegmentStructure = queue_loader.get()
+            queue_loader_item: Any = queue_loader.get()
 
-            # Start to search it.
-            for configuration_key, configuration_value in queue_loader_structure.value.items():
-                if configuration_key in args:
+            # Start to search it. Unwrap structures first, then DB-like dictionaries, so a node
+            # reached from anywhere (top level, nested database, table row) is handled the same.
+            if isinstance_loose(queue_loader_item, ConfigurationDataStandaloneSegmentStructure):
+                try:
+                    queue_loader_item = queue_loader_item.value
+                except Exception:  # noqa: BLE001  - a broken value must not kill the search.
+                    continue
+
+            if isinstance_loose(queue_loader_item, dict):
+                children: Any = queue_loader_item.items()
+            else:
+                children = ((None, queue_loader_item),)
+
+            for configuration_key, configuration_value in children:
+                if configuration_key is not None and configuration_key in args:
                     final_saving_list.append(configuration_value)
+                    continue
 
-                # Check and load the special type in here, load it into the queue.
-                elif isinstance_loose(configuration_value.value, dict):
-                    queue_loader.put(configuration_value)
-
-                # Check the changeable list.
-                elif isinstance_loose(configuration_value.value, list):
-                    temp_queue.put(configuration_value)
-
-                    # Start the list's range.
-                    while not temp_queue.empty():
-                        temp_item: list[Any] = temp_queue.get()
-
-                        # Check the data in list, push the list into the queue.
-                        if isinstance_loose(temp_item, list):
-                            temp_queue.put(temp_item)
-
-                        # Or anything else, push the dict into the queue.
-                        elif isinstance_loose(temp_item, dict):
-                            queue_loader.put(temp_item)
+                explore_container(configuration_value)
 
         # Finally, just return the list.
         return final_saving_list

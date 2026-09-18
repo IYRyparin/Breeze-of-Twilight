@@ -1,14 +1,15 @@
 import ast
 import re
 from ctypes import c_uint8, c_ubyte
-from queue import Queue
+from queue import Empty, Queue
 from typing import *
 
-from src.parsefunc.function import infix_to_postfix_string
-from src.parseutil.kword import ConfigurationStatusExecutiveKeyword, CALCULATE_CHAR
 from src.parsefunc.exception import *
 from src.parsefunc.function import LooseDict, infix_to_postfix, ConversionDecimal
-from src.parseutil.kword import LEGAL_STRING_WORD, ConfigurationExtensionKeyword, STATUS_CHAR
+from src.parsefunc.function import infix_to_postfix_string
+from src.parseutil import kword as keyword
+from src.parseutil.kword import ConfigurationStatusExecutiveKeyword, CALCULATE_CHAR
+from src.parseutil.kword import LEGAL_STRING_WORD, ConfigurationExtensionKeyword
 from src.parseutil.signal import ValueFormatter, ExtensionExplainFormatter, TypeExplainFormatter
 
 
@@ -51,6 +52,230 @@ def calculate_dispose(first: Any, second: Any, event: str) -> Any:
         case _:    raise TypeError(event)   # noqa
 
 
+ESCAPE_SEQUENCE_DICT: dict[str, str] = {
+    "\\\\": "\\", "\\\"": "\"", "\\'": "'",
+    "\\r": "\r", "\\n": "\n", "\\a": "\a", "\\b": "\b", "\\f": "\f", "\\t": "\t", "\\v": "\v",
+    "\\x00": "\x00", "\\x01": "\x01", "\\x02": "\x02", "\\x03": "\x03", "\\x04": "\x04", "\\x05": "\x05",
+    "\\x06": "\x06", "\\x07": "\x07", "\\x08": "\x08", "\\x09": "\x09", "\\x0A": "\x0A", "\\x0B": "\x0B",
+    "\\x0C": "\x0C", "\\x0D": "\x0D", "\\x0E": "\x0E", "\\x0F": "\x0F", "\\x10": "\x10", "\\x11": "\x11",
+    "\\x12": "\x12", "\\x13": "\x13", "\\x14": "\x14", "\\x15": "\x15", "\\x16": "\x16", "\\x17": "\x17",
+    "\\x18": "\x18", "\\x19": "\x19", "\\x1A": "\x1A", "\\x1B": "\x1B", "\\x1C": "\x1C", "\\x1D": "\x1D",
+    "\\x1E": "\x1E", "\\x1F": "\x1F", "\\x20": "\x20", "\\x21": "\x21", "\\x22": "\x22", "\\x23": "\x23",
+    "\\x24": "\x24", "\\x25": "\x25", "\\x26": "\x26", "\\x27": "\x27", "\\x28": "\x28", "\\x29": "\x29",
+    "\\x2A": "\x2A", "\\x2B": "\x2B", "\\x2C": "\x2C", "\\x2D": "\x2D", "\\x2E": "\x2E", "\\x2F": "\x2F",
+    "\\x30": "\x30", "\\x31": "\x31", "\\x32": "\x32", "\\x33": "\x33", "\\x34": "\x34", "\\x35": "\x35",
+    "\\x36": "\x36", "\\x37": "\x37", "\\x38": "\x38", "\\x39": "\x39", "\\x3A": "\x3A", "\\x3B": "\x3B",
+    "\\x3C": "\x3C", "\\x3D": "\x3D", "\\x3E": "\x3E", "\\x3F": "\x3F", "\\x40": "\x40", "\\x41": "\x41",
+    "\\x42": "\x42", "\\x43": "\x43", "\\x44": "\x44", "\\x45": "\x45", "\\x46": "\x46", "\\x47": "\x47",
+    "\\x48": "\x48", "\\x49": "\x49", "\\x4A": "\x4A", "\\x4B": "\x4B", "\\x4C": "\x4C", "\\x4D": "\x4D",
+    "\\x4E": "\x4E", "\\x4F": "\x4F", "\\x50": "\x50", "\\x51": "\x51", "\\x52": "\x52", "\\x53": "\x53",
+    "\\x54": "\x54", "\\x55": "\x55", "\\x56": "\x56", "\\x57": "\x57", "\\x58": "\x58", "\\x59": "\x59",
+    "\\x5A": "\x5A", "\\x5B": "\x5B", "\\x5C": "\x5C", "\\x5D": "\x5D", "\\x5E": "\x5E", "\\x5F": "\x5F",
+    "\\x60": "\x60", "\\x61": "\x61", "\\x62": "\x62", "\\x63": "\x63", "\\x64": "\x64", "\\x65": "\x65",
+    "\\x66": "\x66", "\\x67": "\x67", "\\x68": "\x68", "\\x69": "\x69", "\\x6A": "\x6A", "\\x6B": "\x6B",
+    "\\x6C": "\x6C", "\\x6D": "\x6D", "\\x6E": "\x6E", "\\x6F": "\x6F", "\\x70": "\x70", "\\x71": "\x71",
+    "\\x72": "\x72", "\\x73": "\x73", "\\x74": "\x74", "\\x75": "\x75", "\\x76": "\x76", "\\x77": "\x77",
+    "\\x78": "\x78", "\\x79": "\x79", "\\x7A": "\x7A", "\\x7B": "\x7B", "\\x7C": "\x7C", "\\x7D": "\x7D",
+    "\\x7E": "\x7E", "\\x7F": "\x7F", "\\x80": "\x80", "\\x81": "\x81", "\\x82": "\x82", "\\x83": "\x83",
+    "\\x84": "\x84", "\\x85": "\x85", "\\x86": "\x86", "\\x87": "\x87", "\\x88": "\x88", "\\x89": "\x89",
+    "\\x8A": "\x8A", "\\x8B": "\x8B", "\\x8C": "\x8C", "\\x8D": "\x8D", "\\x8E": "\x8E", "\\x8F": "\x8F",
+    "\\x90": "\x90", "\\x91": "\x91", "\\x92": "\x92", "\\x93": "\x93", "\\x94": "\x94", "\\x95": "\x95",
+    "\\x96": "\x96", "\\x97": "\x97", "\\x98": "\x98", "\\x99": "\x99", "\\x9A": "\x9A", "\\x9B": "\x9B",
+    "\\x9C": "\x9C", "\\x9D": "\x9D", "\\x9E": "\x9E", "\\x9F": "\x9F", "\\xA0": "\xA0", "\\xA1": "\xA1",
+    "\\xA2": "\xA2", "\\xA3": "\xA3", "\\xA4": "\xA4", "\\xA5": "\xA5", "\\xA6": "\xA6", "\\xA7": "\xA7",
+    "\\xA8": "\xA8", "\\xA9": "\xA9", "\\xAA": "\xAA", "\\xAB": "\xAB", "\\xAC": "\xAC", "\\xAD": "\xAD",
+    "\\xAE": "\xAE", "\\xAF": "\xAF", "\\xB0": "\xB0", "\\xB1": "\xB1", "\\xB2": "\xB2", "\\xB3": "\xB3",
+    "\\xB4": "\xB4", "\\xB5": "\xB5", "\\xB6": "\xB6", "\\xB7": "\xB7", "\\xB8": "\xB8", "\\xB9": "\xB9",
+    "\\xBA": "\xBA", "\\xBB": "\xBB", "\\xBC": "\xBC", "\\xBD": "\xBD", "\\xBE": "\xBE", "\\xBF": "\xBF",
+    "\\xC0": "\xC0", "\\xC1": "\xC1", "\\xC2": "\xC2", "\\xC3": "\xC3", "\\xC4": "\xC4", "\\xC5": "\xC5",
+    "\\xC6": "\xC6", "\\xC7": "\xC7", "\\xC8": "\xC8", "\\xC9": "\xC9", "\\xCA": "\xCA", "\\xCB": "\xCB",
+    "\\xCC": "\xCC", "\\xCD": "\xCD", "\\xCE": "\xCE", "\\xCF": "\xCF", "\\xD0": "\xD0", "\\xD1": "\xD1",
+    "\\xD2": "\xD2", "\\xD3": "\xD3", "\\xD4": "\xD4", "\\xD5": "\xD5", "\\xD6": "\xD6", "\\xD7": "\xD7",
+    "\\xD8": "\xD8", "\\xD9": "\xD9", "\\xDA": "\xDA", "\\xDB": "\xDB", "\\xDC": "\xDC", "\\xDD": "\xDD",
+    "\\xDE": "\xDE", "\\xDF": "\xDF", "\\xE0": "\xE0", "\\xE1": "\xE1", "\\xE2": "\xE2", "\\xE3": "\xE3",
+    "\\xE4": "\xE4", "\\xE5": "\xE5", "\\xE6": "\xE6", "\\xE7": "\xE7", "\\xE8": "\xE8", "\\xE9": "\xE9",
+    "\\xEA": "\xEA", "\\xEB": "\xEB", "\\xEC": "\xEC", "\\xED": "\xED", "\\xEE": "\xEE", "\\xEF": "\xEF",
+    "\\xF0": "\xF0", "\\xF1": "\xF1", "\\xF2": "\xF2", "\\xF3": "\xF3", "\\xF4": "\xF4", "\\xF5": "\xF5",
+    "\\xF6": "\xF6", "\\xF7": "\xF7", "\\xF8": "\xF8", "\\xF9": "\xF9", "\\xFA": "\xFA", "\\xFB": "\xFB",
+    "\\xFC": "\xFC", "\\xFD": "\xFD", "\\xFE": "\xFE", "\\xFF": "\xFF",
+    "\uFFFF": "\"", "\uFFFE": ";",  # noqa
+}
+
+
+def is_escaped_char(base_string: str, index: int) -> bool:
+    """
+    Whether the character at `index` is escaped, i.e. protected by an odd run of backslashes.
+
+    A cheap "previous char is a backslash" test is wrong: in `\\\\\\\\"` the quote is NOT escaped,
+    and the comment stripper, the literal extractor and every bracket matcher have to agree.
+
+    :param base_string: str    Whole string being scanned.
+    :param index: int          Position of the candidate character.
+    :return: bool
+    """
+    backslash_run: int = 0
+    scan_index:    int = index - 1
+
+    while scan_index >= 0 and base_string[scan_index] == "\\":
+        backslash_run += 1
+        scan_index -= 1
+
+    return backslash_run % 2 == 1
+
+
+def unescape_string(base_string: str) -> str:
+    """
+    Decode every escape sequence of one raw literal in a single left-to-right pass.
+
+    Chained str.replace calls were used before, which re-decode the produced text: `a\\\\b`
+    became `a\\b` while passing through the `\\\\ -> \\` rule, and then the `\\" -> "` rule
+    attacked the freshly produced backslash, so a literal backslash in front of a quote got eaten.
+
+    :param base_string: str    Raw literal content.
+    :return: str
+    """
+    final_string: str = ""
+    index:        int = 0
+
+    # Start the loop to parse the string value in here.
+    while index < len(base_string):
+        char: str = base_string[index]
+        if char == "\\" and index + 1 < len(base_string):
+            sequence: str = base_string[index:index + 2]
+            final_string += ESCAPE_SEQUENCE_DICT.get(sequence, sequence)
+            index += 2
+            continue
+
+        # The two transient markers use single character codes, see `ReplacerDatabase`.
+        if char in ("\uFFFF", "\uFFFE"):    # noqa
+            final_string += ESCAPE_SEQUENCE_DICT[char]
+            index += 1
+            continue
+
+        # Add the char into the buffer.
+        final_string += char
+        index += 1
+
+    # So finally, we can just return the final string.
+    return final_string
+
+
+def take_saved_string(string_saving_memory: Optional[Queue[str]], context: str = "string literal") -> str:
+    """
+    Pull one pre-decoded string out of the saving memory.
+
+    Every `"..."` literal inside a BOT file is extracted up-front into this queue and is meant
+    to be consumed exactly once, in source order. Using the blocking `Queue.get()` here means
+    ANY misalignment (a doubled read, a synthesized literal, an unterminated quote) makes the
+    parser hang forever with no diagnostics at all, so reads are always non-blocking and an
+    exhausted queue is reported as a syntax problem instead.
+
+    :param string_saving_memory: Queue[str]   The string saving memory, see parser.py.
+    :param context: str    Human readable description, used by the error message.
+    :return: str
+    """
+    if string_saving_memory is None:
+        raise SyntaxError(f"Cannot read {context}: there is no string saving memory.")
+
+    try:
+        return string_saving_memory.get_nowait()
+    except Empty:
+        raise SyntaxError(
+            f"Cannot read {context}: the string saving memory is exhausted, "
+            "please check the file for an unterminated or misplaced \" literal."
+        ) from None
+
+
+def queue_loader_value(queue_loader: Optional[Queue[str]]) -> str:
+    """
+    Read the next stored literal, tolerating the plain `None` used by several call sites.
+
+    :param queue_loader: Queue[str] | None
+    :return: str
+    """
+    if queue_loader is None:
+        return ""
+    return take_saved_string(queue_loader, "string value")
+
+
+def split_top_level_string(dat_info_string: str, separator: str = ",") -> list[str]:
+    """
+    Split a string on `separator` while respecting quoted sections and `[{()}]` nesting.
+
+    :param dat_info_string: str    The basic string which you want to split.
+    :param separator: str          The split signal.
+    :return: list[str]
+    """
+    parts:       list[str] = []
+    buffer:      str       = ""
+    depth:       int       = 0
+    string_mode: bool      = False
+    index:       int       = 0
+
+    while index < len(dat_info_string):
+        char: str = dat_info_string[index]
+
+        if char == '"' and not is_escaped_char(dat_info_string, index):
+            string_mode = not string_mode
+            buffer += char
+            index += 1
+            continue
+
+        if string_mode:
+            buffer += char
+            index += 1
+            continue
+
+        if char in "{[(":
+            depth += 1
+        elif char in "}])":
+            depth -= 1
+
+        if char == separator and depth == 0:
+            parts.append(buffer)
+            buffer = ""
+            index += 1
+            continue
+
+        buffer += char
+        index += 1
+
+    parts.append(buffer)
+    return parts
+
+
+def evaluate_stack(value: list[tuple[Any, ctypes.c_uint8]]) -> Any:
+    """
+    Reduce one value stack (a reverse-polish program stored inside a segment) into its value.
+
+    A token is only treated as an operator when at least two operands are already waiting,
+    otherwise a legitimate string value such as "-" would be mistaken for subtraction.
+
+    :param value: list[tuple[Any, ctypes.c_uint8]]
+    :return: Any
+    """
+    stack_load: list[Any] = []
+
+    for item in value:
+        if isinstance(item[0], str) and item[0] in CALCULATE_CHAR and len(stack_load) >= 2:
+            second_value: Any = stack_load.pop()
+            first_value:  Any = stack_load.pop()
+            stack_load.append(calculate_dispose(first_value, second_value, item[0]))
+        else:
+            stack_load.append(item[0])
+
+    if not stack_load:
+        return None
+
+    if len(stack_load) > 1:
+        raise ValueError(
+            "Incomplete expression while the value was reduced: "
+            f"{len(stack_load)} operands were left without an operator."
+        )
+
+    return stack_load[0]
+
+
 def number_checker(base_temp_parse_string: str) -> tuple[int | float, ctypes.c_uint8]:
     """
 
@@ -84,74 +309,58 @@ def brackets_edge_index_checker(dat_info_string: str,
                                 right_bracket:   str  = ">",
                                 string_ignore:   bool = True) -> tuple[int, int]:
     """
+    Locate the first top-level `left_bracket` at or after `right_move` and return its index
+    together with the index of the `right_bracket` that closes it.
 
-    :param string_ignore:
-    :param left_bracket:
-    :param right_bracket:
+    IMPORTANT - COORDINATE SYSTEM:
+    Both returned indices are ABSOLUTE positions inside the ORIGINAL `dat_info_string` and
+    they point AT the two brackets themselves (they were historically mixed: the left one was
+    absolute while the right one was relative to a re-sliced string, which silently truncated
+    every TABLE/ENUM/UNION type parameter list). Callers therefore always reach the inner
+    content with `dat_info_string[left + 1 : right]`.
+
+    Nesting of identical brackets is respected, and quoted sections can be skipped.
+
     :param dat_info_string: str    The basic string which you want to check.
-    :param right_move: int   Right move's counter, escape useless part.
-    :return: tuple[int, int]
+    :param right_move: int         Start offset, escape the leading part (usually len(keyword)).
+    :param left_bracket: str       Opening signal.
+    :param right_bracket: str      Closing signal.
+    :param string_ignore: bool     Whether quoted content must be skipped.
+    :return: tuple[int, int]       (index of left bracket, index of matching right bracket)
     """
-    first_final_message: int  = 0  # noqa
-    last_final_message:  int  = 0
-    string_signal:       bool = False
+    string_signal: bool = False
+    depth:         int  = 0
+    start_index:   int  = -1
 
-    # Start the loop and check for the left limit signal, typically start with '<'.
-    if dat_info_string[right_move] != left_bracket:
-        for index, dat_char in enumerate(dat_info_string[right_move : ]):  # noqa
-            if (index >= 1 and dat_char == "\"" and dat_info_string[right_move + index - 1] != "\\") or (index == 0 and dat_char == "\""):
-                string_signal = not string_signal
+    for index in range(right_move, len(dat_info_string)):
+        dat_char: str = dat_info_string[index]
 
-            # Search the left bracket. When we need to ignore the string, we need to check the signal in here.
-            if string_ignore:
-                if dat_char == left_bracket and not string_signal:  # Find the left bracket, so we can just break the loop.
-                    break
+        # Track quoted sections first so escaped content stays invisible for the matcher.
+        if dat_char == '"' and not is_escaped_char(dat_info_string, index):
+            string_signal = not string_signal
+            continue
 
-            # Or anything else, we can just ignore the signal.
-            else:
-                if dat_char == left_bracket:
-                    break
+        if string_signal and string_ignore:
+            continue
 
-        # When we found the limit of the right range, means there is no any start limit in here.
-        else:
-            raise IndexError("Error part of the string.")
+        # Search the opening bracket.
+        if start_index == -1:
+            if dat_char == left_bracket:
+                start_index = index
+                depth = 1
+            continue
 
-        # Load the first final message into the value.
-        first_final_message: int = index
+        # Count the nesting until it closes again.
+        if dat_char == left_bracket:
+            depth += 1
+        elif dat_char == right_bracket:
+            depth -= 1
+            if depth == 0:
+                return start_index, index
 
-    # Or anything else, we can just load the start place into the value.
-    else:
-        first_final_message: int = right_move
-
-    # Change the basic string, make it shorter to convenient next loop.
-    dat_info_string = dat_info_string[first_final_message + 1 : ]  # noqa
-
-    # After that, start to check the right angle bracket's index.
-    if dat_info_string[-1] != right_bracket:
-        for index, dat_char in enumerate(dat_info_string[ : : -1]):  # noqa
-            if (index >= 1 and dat_char == "\"" and dat_info_string[right_move + index - 1] != "\\") or (index == 0 and dat_char == "\""):
-                string_signal = not string_signal
-
-            # When we need to ignore the string, we need to check the signal.
-            if string_ignore:
-                if dat_char == right_bracket and not string_signal:
-                    break
-
-            # Or anything else, just ignore it.
-            else:
-                if dat_char == right_bracket:
-                    break
-
-        # When we found the limit of the left range, means there is no any end limit in here.
-        else:
-            raise IndexError("Error part of the string.")
-
-    # Or anything else, we can just load the end place into the value.
-    else:
-        last_final_message: int = len(dat_info_string) - 1
-
-    # Finally, we can return them.
-    return first_final_message, last_final_message
+    if start_index == -1:
+        raise IndexError(f"Cannot find the start signal '{left_bracket}' in the string.")
+    raise IndexError(f"Cannot find the end signal '{right_bracket}' in the string.")
 
 
 def first_signal_edge_checker(origin_string: str, signal_start: str, signal_end: str) -> int:
@@ -167,7 +376,9 @@ def first_signal_edge_checker(origin_string: str, signal_start: str, signal_end:
 
     # Start the loop.
     for origin_index, origin_char in enumerate(origin_string):
-        if origin_char == "\"" and (origin_index == 0 or origin_string[origin_index - 1] != "\\"):
+        # Escape aware: a literal like "\\" ends with a real quote, and a naive "previous char is
+        # a backslash" test never closes it, so the closing signal was searched for forever.
+        if origin_char == "\"" and not is_escaped_char(origin_string, origin_index):
             string_signal = not string_signal
 
         # Check and increase the deep.
@@ -226,15 +437,52 @@ def _parse_number_literal(value: str) -> tuple[Any, ctypes.c_uint8] | None:
         return None
 
 
-def complex_data_type_checker(dat_info_string: str) -> tuple[Any, ctypes.c_uint8]:
-    """Return the parsed value and format signal for a configuration literal."""
+def scalar_value_loader(dat_info_string: str,
+                        string_saving_memory: Optional[Queue[str]],
+                        context: str = "value") -> Any:
+    """
+    Load a single typed literal (used by ENUM/LIMIT candidate lists) as a plain python value.
+
+    A quoted literal always costs exactly ONE entry of the string saving memory - never more,
+    never zero - so several candidates can't drain the queue and stall the parser.
+
+    :param dat_info_string: str       Raw literal text, e.g. 5 or "yes".
+    :param string_saving_memory: Queue[str]   The string saving memory, see parser.py.
+    :param context: str               Human readable slot name for error messages.
+    :return: Any
+    """
+    text: str = dat_info_string.strip()
+
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        return take_saved_string(string_saving_memory, context)
+
+    return complex_data_type_checker(text)[0]
+
+
+def complex_data_type_checker(dat_info_string: str,
+                              string_saving_memory: Optional[Queue[str]] = None) -> tuple[Any, ctypes.c_uint8]:
+    """
+    Return the parsed value and format signal for a configuration literal.
+
+    A quoted literal always costs ONE entry of the string saving memory when the memory is given:
+    every '"' in the source was lifted into it at load time, so leaving the entry behind shifts
+    every following statement onto somebody else's string.
+
+    :param dat_info_string: str     Literal text.
+    :param string_saving_memory: Queue[str]   Optional string saving memory.
+    :return: tuple[Any, ctypes.c_uint8]
+    """
     dat_info_string = dat_info_string.strip()
     if not dat_info_string:
         raise ValueError("Unsupported data type.")
 
     # Quoted strings.
     if len(dat_info_string) >= 2 and dat_info_string[0] == '"' and dat_info_string[-1] == '"':
-        target_string = dat_info_string[1:-1]
+        target_string = (
+            take_saved_string(string_saving_memory, "value")
+            if string_saving_memory is not None
+            else unescape_string(dat_info_string[1:-1])
+        )
         if _is_file_string_literal(target_string):
             return str(target_string), ValueFormatter.FILE_STRING_FORMATTER
         return str(target_string), ValueFormatter.DEFAULT_STRING_FORMATTER
@@ -314,6 +562,35 @@ def _value_format_change(dat_info_string: tuple[str, list[int]]) -> list[tuple[s
     return final_return_list
 
 
+def int_literal_loader(token: str) -> int:
+    """
+    Parse one integer token coming from a postfix expression.
+
+    The BOT grammar allows the 0b / 0o / 0d / 0x bases and "_" as a thousand separator, none of
+    which the built-in `int()` understands, so every literal goes through the shared scanner.
+
+    :param token: str    The literal token, e.g. "0x1f" or "1_000".
+    :return: int
+    """
+    parsed = _parse_number_literal(token)
+    if parsed is None:
+        raise ValueError(f"Unsupported integer literal: {token!r}")
+    return int(parsed[0])
+
+
+def decimal_literal_loader(token: str) -> int | float:
+    """
+    Same loader as int_literal_loader but keeps the fractional part for FLOAT expression lists.
+
+    :param token: str    The literal token, e.g. "0.5" or "0x1f".
+    :return: int | float
+    """
+    parsed = _parse_number_literal(token)
+    if parsed is None:
+        raise ValueError(f"Unsupported numeric literal: {token!r}")
+    return parsed[0]
+
+
 def complex_mathmatics_suffix_int_calculator(dat_info_string: tuple[str, list[int]], signal_check: bool = True) -> list[tuple[int | str, c_ubyte]]:
     """
 
@@ -340,7 +617,7 @@ def complex_mathmatics_suffix_int_calculator(dat_info_string: tuple[str, list[in
 
         # Or anything else, we can just input it into the stack.
         else:
-            calculate_stack.append((int(element_item[0]), element_item[1]))
+            calculate_stack.append((int_literal_loader(element_item[0]), element_item[1]))
 
     # So finally, we can just return it.
     return calculate_stack
@@ -373,7 +650,7 @@ def complex_mathmatics_suffix_decimal_calculator(dat_info_string: tuple[str, lis
 
         # Or anything else, we can just append it.
         else:
-            calculate_stack.append((ConversionDecimal(element_item[0]), element_item[1]))
+            calculate_stack.append((ConversionDecimal(decimal_literal_loader(element_item[0])), element_item[1]))
 
     # Finally, anything is ok, so we can return it at all.
     return calculate_stack
@@ -395,40 +672,40 @@ def complex_string_suffix_calculator(string_load_list: list[str | int], postfix_
         return [(string_load_list[0], ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
 
     # Start the loop to merge the string in here.
-    else:
-        for saving_item in string_load_list:
-            push_index: int = postfix_inject_index_list[explain_search_pointer]
-            explain_signal: c_uint8 = ValueFormatter.DEFAULT_EMPTY_FORMATTER
+    for saving_item in string_load_list:
+        # Operators: merge only when neither side is waiting for a format injection.
+        if isinstance(saving_item, str) and saving_item in {"+", "*"}:
+            value_search_pointer += 1
+            right_string: tuple[str | int, c_uint8] = temp_load_stack.pop()   # right operand first (LIFO)
+            left_string:  tuple[str | int, c_uint8] = temp_load_stack.pop()
 
-            # Check the index of the value is the formatter or not.
-            if saving_item not in {"+", "*"}:
-                if value_search_pointer == push_index:
-                    explain_search_pointer += 1
-                    explain_signal = ValueFormatter.DEFAULT_EMPTY_MUTABLE_FORMATTER
-
-                # Merge the value into stack.
-                temp_load_stack.append((saving_item, explain_signal))
-                value_search_pointer += 1
-
-            # Or anything else, we can start to merge it when all is not the mutable formatter.
-            else:
-                value_search_pointer += 1
-                first_string: tuple[str | int, c_uint8] = temp_load_stack.pop()
-                second_string: tuple[str | int, c_uint8] = temp_load_stack.pop()
-
-                # Check the format, and calculate the string.
-                if first_string[1] == ValueFormatter.DEFAULT_EMPTY_FORMATTER and second_string[1] == ValueFormatter.DEFAULT_EMPTY_FORMATTER:
-                    if saving_item == "+" and isinstance(second_string[0], str) and isinstance(first_string[0], str):
-                        temp_load_stack.append((first_string[0] + second_string[0], ValueFormatter.DEFAULT_EMPTY_FORMATTER))  # noqa
-                    elif saving_item == "*" and isinstance(second_string[0], int) and isinstance(first_string[0], str):
-                        temp_load_stack.append((first_string[0] * second_string[0], ValueFormatter.DEFAULT_EMPTY_FORMATTER))  # noqa
-                    else:
-                        raise ValueError(f"Error formatter: {first_string[0]} and {second_string[0]}")
-
-                # Or else, just return it as normal, follow LIFO, like nothing happen.
+            if left_string[1] == ValueFormatter.DEFAULT_EMPTY_FORMATTER and right_string[1] == ValueFormatter.DEFAULT_EMPTY_FORMATTER:
+                if saving_item == "+" and isinstance(left_string[0], str) and isinstance(right_string[0], str):
+                    temp_load_stack.append((left_string[0] + right_string[0], ValueFormatter.DEFAULT_EMPTY_FORMATTER))  # noqa
+                elif saving_item == "*" and isinstance(left_string[0], str) and isinstance(right_string[0], int):
+                    temp_load_stack.append((left_string[0] * right_string[0], ValueFormatter.DEFAULT_EMPTY_FORMATTER))  # noqa
+                elif saving_item == "*" and isinstance(left_string[0], int) and isinstance(right_string[0], str):
+                    temp_load_stack.append((right_string[0] * left_string[0], ValueFormatter.DEFAULT_EMPTY_FORMATTER))  # noqa
                 else:
-                    temp_load_stack.append(second_string)
-                    temp_load_stack.append(first_string)
+                    raise ValueError(f"Error formatter: {left_string[0]} and {right_string[0]}")
+
+            # Or else, just return it as normal, follow LIFO, like nothing happen.
+            else:
+                temp_load_stack.append(left_string)
+                temp_load_stack.append(right_string)
+                temp_load_stack.append((saving_item, ValueFormatter.DEFAULT_EMPTY_FORMATTER))
+
+            continue
+
+        # Operands: mark it mutable when it belongs to a FORMAT placeholder slot.
+        explain_signal: c_uint8 = ValueFormatter.DEFAULT_EMPTY_FORMATTER
+        if explain_search_pointer < len(postfix_inject_index_list):
+            if value_search_pointer == postfix_inject_index_list[explain_search_pointer]:
+                explain_search_pointer += 1
+                explain_signal = ValueFormatter.DEFAULT_EMPTY_MUTABLE_FORMATTER
+
+        temp_load_stack.append((saving_item, explain_signal))
+        value_search_pointer += 1
 
     # Finally, return the stack here.
     return temp_load_stack
@@ -496,7 +773,7 @@ def format_checker(value: str) -> tuple[str, list[int]]:
 
             # Search and repair the default value.
             while (string_signal or next_search_char in LEGAL_STRING_WORD[:-1] + ".()") and next_search_index < len(value):
-                if next_search_char == "\"" and value[next_search_index - 1] != "\\":
+                if next_search_char == "\"" and not is_escaped_char(value, next_search_index):
                     string_signal = not string_signal
                 next_search_string += next_search_char  # Search and add the default value in here.
                 next_search_index += 1
@@ -580,7 +857,9 @@ class DatabasesSegmentTypeChecker(object):
             "file":             self.file_segment_type_checker,
             "anything":         self.anything_segment_type_checker,
             "enum":             self.enum_segment_type_checker,
-            "table":            self.table_segment_type_checker
+            "table":            self.table_segment_type_checker,
+            "union":            self.union_segment_type_checker,
+            "conversion":       self.conversion_segment_type_checker
             # +---------------+--------------------------------------+
         })
         key = string.strip().lower()
@@ -595,7 +874,23 @@ class DatabasesSegmentTypeChecker(object):
             key = aliases[key]
 
         # Return the correct value (function pointer).
+        if key not in CHECKING_DICTIONARY:
+            raise KeyError(f"Unsupported configuration data type: {string.strip()!r}")
+
         return CHECKING_DICTIONARY[key]
+
+    def resolve_type(self, dat_info_string: str) -> tuple[list[type], ctypes.c_uint8]:
+        """
+        Resolve one type word (with its parameters) into concrete python types.
+
+        `dict_checker` only hands back the *checker callable*, which is what the parser needs
+        for the statement level, while every place that needs the real type list (tables,
+        unions, nested declarations) must go resolving through this helper instead.
+
+        :param dat_info_string: str    Full type word, e.g. "int" or "table<int, str>".
+        :return: tuple[list[type], ctypes.c_uint8]
+        """
+        return self.dict_checker(dat_info_string)(dat_info_string, None)
 
     # IDENTIFICATION SETTER SEGMENT PART. TO >>> NORMAL SEGMENT TYPE CHECKER PART.
     # 
@@ -650,11 +945,12 @@ class DatabasesSegmentTypeChecker(object):
     # 
     # SETTER SEGMENT PART START.
 
-    def table_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], c_uint8]:  # noqa
+    def table_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type | list[type]], c_ubyte]:
         """
         Welp...This part of function is used to parse the table type.
         It will return a type value and a format signal, which means the value's type and value's format.
         So from here, it can realize data's type information and make it easy to check it.
+        :param queue_loader:
         :param dat_info_string: str     The basic string which you want to check.
         :return: tuple[type, ctypes.c_uint8]
         """
@@ -671,52 +967,54 @@ class DatabasesSegmentTypeChecker(object):
         )
 
         # Get the edge, push it into the limit range and get the string which has been filed.
-        table_element_type_info_string: str = dat_info_string[limit_range[0] : limit_range[1]]  # noqa
+        table_element_type_info_string: str = dat_info_string[limit_range[0] + 1 : limit_range[1]]  # noqa
 
         # Delete the useless value.
         del limit_range
 
-        # Load a list to save the type.
-        final_saving_list: list[type] = []
-        limit_countdown:   int        = 0
-        string_signal:     bool       = False  # This is prepared for the future.
-
-        # Start to the next loop, check the value and save it to the list.
-        for element_index, element_char in enumerate(table_element_type_info_string):
-            tempo_string_value: str = ''
-
-            # In some place, we can use this signal to ignore some useless condition.
-            if not string_signal:
-                if element_char in list(LEGAL_STRING_WORD):  # noqa Load the string into the temp string space.
-                    tempo_string_value += element_char
-                    continue
-
-                # Check the pause signal ',' and prepare for input the final type.
-                elif element_char == "," and limit_countdown == 0:
-                    final_element_type: type = self.dict_checker(tempo_string_value)
-                    final_saving_list.append(final_element_type)
-                    tempo_string_value = ''  # noqa Clean the temp value and prepare for next loop.
-
-                    # After that, we are nothing to do, so we can just jump into next loop and don't need to wait for it.
-                    del final_element_type
-                    continue
-
-                # Drop out some useless char in here.
-                elif element_char == " " and not string_signal:
-                    continue
-
-                # Mark down the string, drop out the part.
-                elif element_index >= 1 and element_char == "\"" and table_element_type_info_string[element_index - 1] != "\\":
-                    string_signal = not string_signal
-
-                # Mark down the special value, make sure we can load it all into the string.
-                elif element_char == "<": limit_countdown += 1  # noqa
-                elif element_char == ">": limit_countdown -= 1  # noqa
-
         # So after all is done, we can just return it. Well...don't forget to change it.
-        return final_saving_list, TypeExplainFormatter.LIST_TYPE_EXPLAIN
+        return self._column_type_list(table_element_type_info_string, nested_as_table=True), TypeExplainFormatter.LIST_TYPE_EXPLAIN
 
-    def union_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type], ctypes.c_uint8]:  # noqa
+    def _column_type_list(self,
+                          type_info_string: str,
+                          nested_as_table:  bool = False) -> list[type | list[type]]:
+        """
+        Turn a comma separated type list such as "int, str, table<int, str>" into python types.
+
+        Each column is resolved to a real type instead of the checker callable, otherwise every
+        later `isinstance` check silently fails. A column declared as another table collapses
+        into a *list* of types, which is exactly the marker `_data_load_table` watches for when
+        it has to recurse into a nested table.
+
+        :param type_info_string: str        The inner part of the '<...>' block.
+        :param nested_as_table: bool        Keep nested table columns wrapped in a list.
+        :return: list[type | list[type]]
+        """
+        final_saving_list: list[type | list[type]] = []
+
+        for raw_column in split_top_level_string(type_info_string, ","):
+            column_word: str = raw_column.strip()
+            if column_word == "":
+                continue
+
+            column_types, explain = self.resolve_type(column_word)
+
+            if explain == TypeExplainFormatter.LIST_TYPE_EXPLAIN and nested_as_table:
+                final_saving_list.append(list(column_types))  # Nested table: a whole signature.
+                continue
+
+            if nested_as_table:
+                final_saving_list.append(column_types[0] if len(column_types) > 0 else Any)
+                continue
+
+            final_saving_list.extend(column_types)  # Union: everything lands in the same pool.
+
+        if len(final_saving_list) == 0:
+            raise SyntaxError(f"Empty type list in '{type_info_string.strip()}', table/union need at least one column.")
+
+        return final_saving_list
+
+    def union_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[type | list[type]], ctypes.c_uint8]:
         """
         This function will return a type value and a format signal, which means the value's type and value's format.\n
         From the UNION type, is following those rules.\n
@@ -725,6 +1023,7 @@ class DatabasesSegmentTypeChecker(object):
         - The type of each element is checked individually.\n
         - Result is a list of types, and the format signal is a default type explain.\n
         - Final value's type need to be included in the list.\n
+        :param queue_loader:
         :param dat_info_string: str     The basic string which you want to check.
         :return: tuple[type, ctypes.c_uint8]
         """
@@ -741,36 +1040,10 @@ class DatabasesSegmentTypeChecker(object):
         )
 
         # Push the urgent part into new value.
-        dat_info_string: str = dat_info_string[limit_range[0] : limit_range[1]]  # noqa
-
-        # Initialize some value.
-        final_saving_list:  list[type] = []
-        temp_saving_string: str = ''
-        string_signal:      bool = False
-
-        # Start the loop to check the value.
-        for element_index, element_char in enumerate(dat_info_string):
-            if element_char in list(LEGAL_STRING_WORD):  # noqa
-                temp_saving_string += element_char
-                continue
-
-            # Check the edge signal.
-            elif element_char == "," and not string_signal:
-                final_element_type: type = self.dict_checker(temp_saving_string)
-                final_saving_list.append(final_element_type)
-                temp_saving_string = ''
-                continue
-
-            # Ignore useless char.
-            elif element_char == " " and not string_signal:
-                continue
-
-            # Mark down the string, drop out the part.
-            elif element_index >= 1 and element_char == "\"" and dat_info_string[element_index - 1] != "\\":
-                string_signal = not string_signal
+        dat_info_string: str = dat_info_string[limit_range[0] + 1:limit_range[1]]  # noqa
 
         # Finally, return them.
-        return final_saving_list, TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
+        return self._column_type_list(dat_info_string, nested_as_table=False), TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     @staticmethod
     def enum_segment_type_checker(dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[list[tuple[Any, ctypes.c_uint8]], ctypes.c_uint8]:  # noqa
@@ -794,40 +1067,53 @@ class DatabasesSegmentTypeChecker(object):
         )
 
         # Push the urgent part into the new value.
-        dat_info_string:    str                              = dat_info_string[limit_range[0] : limit_range[1]]  # noqa
-        final_saving_list:  list[tuple[Any, ctypes.c_uint8]] = []
-        temp_saving_string: str                              = ''
-        string_signal:      bool                             = False
+        dat_info_string: str = dat_info_string[limit_range[0] + 1 : limit_range[1]]  # noqa
+
+        # ENUM only restricts *which values* are legal, it never changes the storage type,
+        # exactly like "-> LIMIT(...)": the candidate list is exposed by `enum_values` and the
+        # parser installs it as a limitation rule.
+        return [Any], TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
+
+    @staticmethod
+    def enum_values(dat_info_string:    Optional[str],
+                    queue_loader:       Optional[Queue[str]]) -> list[Any]:
+        """
+        Collect every candidate value declared inside ENUM<...>.
+
+        :param dat_info_string: str    Full type word, e.g. "enum<1, 2, 3>".
+        :param queue_loader: Queue[str]   The string saving memory, see parser.py.
+        :return: list[Any]
+        """
+        if dat_info_string is None:
+            raise ValueError("This function need to get the dat_info_string segment.")
+
+        dat_info_string = dat_info_string.lower()
+        limit_range: tuple[int, int] = brackets_edge_index_checker(
+            dat_info_string=dat_info_string,
+            right_move=4  # len("enum") = 4
+        )
+        inner_string:  str       = dat_info_string[limit_range[0] + 1:limit_range[1]]
+        final_saving:  list[Any] = []
 
         # Start to parse the data.
-        for element_index, element_char in enumerate(dat_info_string):
-            if element_char in list(LEGAL_STRING_WORD):  # noqa
-                temp_saving_string += element_char
-
-            # Check out the terminate signal.
-            elif element_char == "," and not string_signal:
-                value_loader: tuple[Any, c_uint8] = complex_data_type_checker(temp_saving_string)
-                if isinstance(value_loader[0], str) and queue_loader is not None:
-                    value_loader = (queue_loader.get(), value_loader[1])
-
-                # Append the value into the list and clear the temp string.
-                final_saving_list.append(value_loader)
-                temp_saving_string = ''
-
-            # Drop out the useless value in here.
-            elif element_char == " " and not string_signal:
+        for raw_value in split_top_level_string(inner_string, ","):
+            temp_saving_string: str = raw_value.strip()
+            if temp_saving_string == "":
                 continue
 
-            # Check the string signal.
-            elif element_index >= 1 and element_char == "\"" and dat_info_string[element_index - 1] != "\\":
-                string_signal = not string_signal
+            final_saving.append(scalar_value_loader(temp_saving_string, queue_loader, "enum value"))
+
+        if len(final_saving) == 0:
+            raise SyntaxError("ENUM<...> needs at least one candidate value.")
 
         # At last, so we can return them.
-        return final_saving_list, TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
+        return final_saving
 
-    def conversion_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[type, ctypes.c_uint8]:  # noqa
+    def conversion_segment_type_checker(self, dat_info_string: Optional[str], queue_loader: Optional[Queue]) -> tuple[
+        tuple[list[type], c_ubyte], c_ubyte]:  # noqa
         """
 
+        :param queue_loader:
         :param dat_info_string: str     The basic string which you want to convert.
         :return: tuple[type, ctypes.c_uint8]
         """
@@ -844,11 +1130,16 @@ class DatabasesSegmentTypeChecker(object):
         )
 
         # Push the urgent part.
-        dat_info_string: str = dat_info_string[limit_range[0]:limit_range[1]]
+        dat_info_string: str = dat_info_string[limit_range[0] + 1:limit_range[1]]
 
         # And...Because this only has one segment, so we can just return it.
         del limit_range
-        return self.dict_checker(dat_info_string), ValueFormatter.CUSTOM_CONVERSION_FORMATTER
+
+        # TODO: the dynamic CONVERSION rule (CONVERSION-START section) is still unimplemented,
+        #  see ConfigurationStandalone._data_load_conversion. The declared inner type is used
+        #  meanwhile so the statement stays loadable and keeps its static value instead of
+        #  blowing the whole file up with an unsupported signal.
+        return self.resolve_type(dat_info_string), TypeExplainFormatter.DEFAULT_TYPE_EXPLAIN
 
     # SETTER SEGMENT PART END.
     # endregion
@@ -867,10 +1158,21 @@ class DatabasesSegmentValueChecker(object):
         self._explain:    ctypes.c_uint8 = explain if explain is not None else ctypes.c_uint8(0x00)
 
     def auto_check(self, name: str) -> Any:
+        """
+        Return the value parser which belongs to a python type name.\n
+
+        Every returned parser builds a *value stack* (`list[tuple[Any, formatter]]`), which is
+        the representation all downstream code expects. `boolean_parser` also serves the
+        IDENTIFICATION title lines where a bare bool is wanted, so it stays scalar and is simply
+        wrapped here instead.
+
+        :param name: str    Python type name, e.g. 'int', 'str', 'bool'.
+        :return: Any    Callable(temp_parse_string, queue_loader[, follow]) -> value stack
+        """
         match name:
             case 'int':   return self.int_number_parser     # noqa
             case 'float': return self.float_number_parser   # noqa
-            case 'bool':  return self.boolean_parser        # noqa
+            case 'bool':  return self.boolean_stack_parser  # noqa
             case 'str':   return self.string_parser         # noqa
             case 'null':  return self.null_parser           # noqa
             case _:       return None                       # noqa
@@ -902,13 +1204,20 @@ class DatabasesSegmentValueChecker(object):
         # Start the first part of the loop.
         # Start to check the string, if it starts with a double quote, we can just return it directly.
         for element_index, element_char in enumerate(temp_parse_string):
-            if element_char == "\"" and (element_index == 0 or temp_parse_string[element_index - 1] != "\\"):
+            if element_char == "\"" and not is_escaped_char(temp_parse_string, element_index):
                 string_signal = not string_signal
-                if not string_signal:
-                    final_saving_string += f"\"{queue_loader.get()}\""
 
-            # Search the operation char.
-            elif element_char in {"+", "*", "(", ")"} and not string_signal:
+                # The literal goes back into an expression string that is tokenized a second
+                # time, so every quote and backslash of the decoded content has to be escaped
+                # again - otherwise a decoded '"' silently ends the literal early.
+                if not string_signal:
+                    escaped_value: str = queue_loader_value(queue_loader).replace("\\", "\\\\").replace("\"", "\\\"")
+                    final_saving_string += f"\"{escaped_value}\""
+
+            # Search the operation char. Operators, parentheses and the repeat counter are the
+            # only things outside a literal: without the digits a repetition such as "ab" * 3 lost
+            # its right operand and the later evaluation popped an empty stack.
+            elif not string_signal and (element_char in {"+", "*", "(", ")"} or element_char.isdigit() or element_char.isspace()):
                 final_saving_string += element_char
 
         # All is over, so we can start next part of the parsing, just merge and return the stack here.
@@ -918,6 +1227,18 @@ class DatabasesSegmentValueChecker(object):
     @staticmethod
     def boolean_parser(temp_parse_string: str, queue_loader: Optional[Queue[str]], follow: type = Any) -> bool:  # noqa
         return temp_parse_string.lower().strip() == ConfigurationStatusExecutiveKeyword.STATUS_EXEC_KEYWORD_TRUE
+
+    @classmethod
+    def boolean_stack_parser(cls, temp_parse_string: str, queue_loader: Optional[Queue[str]], follow: type = Any) -> list[tuple[bool, c_ubyte]]:  # noqa
+        """
+        `boolean_parser` in value-stack form, the representation every segment value uses.
+
+        :param temp_parse_string: str
+        :param queue_loader: Queue[str]
+        :param follow: type
+        :return: list[tuple[bool, c_ubyte]]
+        """
+        return [(cls.boolean_parser(temp_parse_string, queue_loader), ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
 
     @staticmethod
     def null_parser(temp_parse_string: str = "", queue_loader: Optional[Queue[str]] = None, follow: type = Any) -> str:  # noqa
@@ -987,57 +1308,81 @@ class DatabaseSegmentExtensionRequireChecker(object):
         :return: list[tuple[Any, ctypes.c_uint8]]
         """
         dat_info_string:    str                              = dat_info_string.lower().strip()
-        temp_string_memory: str                              = ""
-        final_saving_list:  list[tuple[Any, ctypes.c_uint8]] = []
-        string_signal:      bool                             = False
+        final_saving_list:  list[tuple[Any, ctypes.c_uint8]] = []  # noqa
+        type_name:          str                              = value_type.__name__ if hasattr(value_type, "__name__") else str(value_type)  # noqa
 
-        # Add the end signal into the end of the string to parse normally.
-        if not dat_info_string.endswith(","):
-            dat_info_string = dat_info_string + ","
-
-        # Start the loop to check the data.
-        for element_index, element_char in enumerate(dat_info_string):
-            if element_char in list(LEGAL_STRING_WORD + STATUS_CHAR) and not string_signal:  # Load the legal char into the element.
-                temp_string_memory += element_char
-
-            # Check the string.
-            elif element_index >= 1 and element_char == "\"" and dat_info_string[element_index - 1] != "\\":
-                string_signal = not string_signal
-
-                # Change the value into the correct part of it.
-                if not string_signal:
-                    temp_string_memory = string_saving_memory.get()
-
-                # Drop out other part, because we don't need it.
+        # Split on top level commas instead of hand scanning the characters: quoted commas were
+        # previously swallowed into the value and a stray '"' restarted a scan that could never
+        # terminate, and a single string candidate used to be read twice.
+        for raw_item in split_top_level_string(dat_info_string, ","):
+            temp_string_memory: str = raw_item.strip()
+            if temp_string_memory == "":
                 continue
 
-            # Check the interrupted char. That means we need to terminate input and start to check the data.
-            elif element_char == "," and temp_string_memory != "":
-                value_type_saver:  Any
-                prefix_temp_saver: ctypes.c_uint8
+            # Check the value's prefix to understand what it's mean.
+            prefix_temp_saver: ctypes.c_uint8 = ExtensionExplainFormatter.LIMIT_WITHIN_VALUE
+            split_memory: list[str] = temp_string_memory.split(None, 1)
+            if split_memory[0] == ConfigurationStatusExecutiveKeyword.STATUS_EXEC_KEYWORD_EXCLUDE:
+                prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHOUT_VALUE
+                temp_string_memory = split_memory[1].strip() if len(split_memory) > 1 else ""
 
-                # Check the value's prefix to understand what it's mean.
-                if temp_string_memory.startswith(ConfigurationStatusExecutiveKeyword.STATUS_EXEC_KEYWORD_EXCLUDE):
-                    prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHOUT_VALUE
-                    temp_string_memory = temp_string_memory[7:]
-                else:
-                    prefix_temp_saver = ExtensionExplainFormatter.LIMIT_WITHIN_VALUE
+            if temp_string_memory == "":
+                raise SyntaxError("EXCLUDE needs a value in LIMIT(...).")
 
-                # Match and get the correct type of the value.
-                match value_type.__name__:  # Owing to the undeniably profound fact, so in this version, it can't parse complex data like list, database, and so on.
-                    case "int":   value_type_saver = self._value_parser_heap.int_number_parser(temp_string_memory, None)
-                    case "float": value_type_saver = self._value_parser_heap.float_number_parser(temp_string_memory, None)
-                    case "str":   value_type_saver = string_saving_memory.get()
-                    case "bool":  value_type_saver = self._value_parser_heap.boolean_parser(temp_string_memory, None)
-                    case "file":  value_type_saver = string_saving_memory.get()
-                    case _:       value_type_saver = complex_data_type_checker(temp_string_memory)[0]
+            # Grammar.bnf: "integer TO integer" is a range and "SUM integer TO integer" folds the
+            # whole range into one accumulated value. Both were parsed as an ordinary literal
+            # before, which blew up on the word TO.
+            range_split: list[str] = temp_string_memory.split()
+            if len(range_split) >= 3 and range_split[-2].upper() == keyword.ConfigurationDataExecutiveKeyword.EXECUTIVE_KEYWORD_TO.upper():
+                low_value:  Any = int_literal_loader(range_split[-3])
+                high_value: Any = int_literal_loader(range_split[-1])
 
-                # Append the final information into the list.
-                final_saving_list.append((value_type_saver, prefix_temp_saver))
-                temp_string_memory = ""  # Clean the buffer.
+                if len(range_split) == 4 and range_split[0].upper() == keyword.ConfigurationDataExecutiveKeyword.EXECUTIVE_KEYWORD_SUMMARY.upper():
+                    # "SUM 1 TO 3" == 1 + 2 + 3.
+                    summary_value: int = sum(range(int(low_value), int(high_value) + 1))
+                    final_saving_list.append((summary_value, prefix_temp_saver))
+                    continue
+
+                range_signal: ctypes.c_uint8 = (
+                    ExtensionExplainFormatter.LIMIT_WITHOUT_CONDITION_AND_EQUAL
+                    if prefix_temp_saver == ExtensionExplainFormatter.LIMIT_WITHOUT_VALUE
+                    else ExtensionExplainFormatter.LIMIT_WITHIN_CONDITION_AND_EQUAL
+                )
+                final_saving_list.append(((low_value, high_value), range_signal))
+                continue
+
+            # A limitation rule compares the value against a plain python value (never against a
+            # whole value stack), so every candidate is collapsed to its scalar here.
+            final_saving_list.append((self._scalar_limit_value(temp_string_memory, type_name, string_saving_memory), prefix_temp_saver))
+
+        if len(final_saving_list) == 0:
+            raise SyntaxError("LIMIT(...) needs at least one value.")
 
         # So finally, we can return it.
         return final_saving_list
+
+    def _scalar_limit_value(self,
+                            dat_info_string:      str,
+                            type_name:            str,
+                            string_saving_memory: Optional[Queue[str]]) -> Any:
+        """
+        Build the scalar used by a single LIMIT rule entry.
+
+        :param dat_info_string: str       Already trimmed candidate text.
+        :param type_name: str             __name__ of the declared value type.
+        :param string_saving_memory: Queue[str]   The string saving memory, see parser.py.
+        :return: Any
+        """
+        # Quoted candidates are strings (or file paths) whatever the declared type is, and they
+        # always cost exactly one entry of the string saving memory.
+        if len(dat_info_string) >= 2 and dat_info_string[0] == '"' and dat_info_string[-1] == '"':
+            return take_saved_string(string_saving_memory, "limit value")
+
+        match type_name:  # Owing to the undeniably profound fact, so in this version, it can't parse complex data like list, database, and so on.
+            case "int":   return evaluate_stack(self._value_parser_heap.int_number_parser(dat_info_string, None))           # noqa
+            case "float": return float(evaluate_stack(self._value_parser_heap.float_number_parser(dat_info_string, None)))  # noqa
+            case "bool":  return self._value_parser_heap.boolean_parser(dat_info_string, None)                              # noqa
+            case _:       return complex_data_type_checker(dat_info_string)[0]                                                         # noqa
 
     @staticmethod
     def regular_rule_explain(dat_info_string: str, string_saving_memory: Queue[str]) -> list[tuple[str, ctypes.c_uint8]]:
@@ -1049,31 +1394,45 @@ class DatabaseSegmentExtensionRequireChecker(object):
         """
         dat_info_string:   str                              = dat_info_string.strip()
         final_saving_list: list[tuple[Any, ctypes.c_uint8]] = []
-        string_signal:     bool                             = False
-        string_loader:     str                              = ""
 
-        # Load regular string from queue. In here, data string just used to check the prefix and count of the string.
-        for element_index, element_char in enumerate(dat_info_string):
-            if element_char == "\"" and (element_index == 0 or dat_info_string[element_index - 1] != "\\"):
-                string_signal = not string_signal
+        # One entry per pattern; '!' in front of it flips the rule into "must NOT match".
+        for raw_item in split_top_level_string(dat_info_string, ","):
+            string_loader: str = raw_item.strip()
+            if string_loader == "":
+                continue
 
-            # Check the quit signal, load string into the list.
-            if (element_char == "," or element_index >= len(dat_info_string) - 1) and not string_signal:
-                prefix_index:   int     = 0
-                regular_signal: c_uint8 = ExtensionExplainFormatter.LIMIT_WITHIN_STRING_REGULAR
+            regular_signal: c_uint8 = ExtensionExplainFormatter.LIMIT_WITHIN_STRING_REGULAR
 
-                # Search and append the prefix index in here.
-                while string_loader[prefix_index] != "\"":
-                    match string_loader[prefix_index]:
-                        case '!': regular_signal = ExtensionExplainFormatter.LIMIT_WITHOUT_STRING_REGULAR
-                        case _:   pass  # noqa
+            # Search the prefix. Both '!' ("!"^bad$") and the EXCLUDE keyword are accepted; the
+            # original scan only advanced the pointer on '"' so anything else spun here forever.
+            while True:
+                if string_loader.startswith("!"):
+                    regular_signal = ExtensionExplainFormatter.LIMIT_WITHOUT_STRING_REGULAR
+                    string_loader = string_loader[1:].strip()
+                    continue
 
-                # Check and push the value into here.
-                final_saving_list.append((string_saving_memory.get(), regular_signal))  # noqa
-                string_loader = ""
+                lowered = string_loader.lower()
+                if lowered.startswith(ConfigurationStatusExecutiveKeyword.STATUS_EXEC_KEYWORD_EXCLUDE):
+                    regular_signal = ExtensionExplainFormatter.LIMIT_WITHOUT_STRING_REGULAR
+                    string_loader = string_loader[len(ConfigurationStatusExecutiveKeyword.STATUS_EXEC_KEYWORD_EXCLUDE):].strip()
+                    continue
 
-            # Add other char into the loader.
-            string_loader += element_char
+                break
+
+            # Load regular string from queue. In here, data string just used to check the prefix and count of the string.
+            if string_loader.startswith('"'):
+                string_loader = take_saved_string(string_saving_memory, "regular expression")
+
+            elif string_loader.endswith('"'):  # tolerate a stray closing quote
+                string_loader = string_loader[:-1]
+
+            if string_loader == "":
+                raise SyntaxError("REGULAR(...) got an empty pattern.")
+
+            final_saving_list.append((string_loader, regular_signal))
+
+        if len(final_saving_list) == 0:
+            raise SyntaxError("REGULAR(...) needs at least one pattern.")
 
         # Finally, return the list.
         return final_saving_list

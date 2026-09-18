@@ -1,13 +1,14 @@
 # VALUE SAVING STRUCTURE
 
 import ctypes
+import re
+from decimal import Decimal
 from typing import Any
 
 from src.parseutil.kword import CALCULATE_CHAR
-from src.parseutil.signal import ValueFormatter
+from src.parseutil.signal import ValueFormatter, ExtensionExplainFormatter, TypeExplainFormatter
 from src.parsefunc.function import isinstance_loose, ConversionDecimal
-from src.parseutil.signal import TypeExplainFormatter
-from src.parseutil.column import calculate_dispose
+from src.parseutil.column import evaluate_stack
 
 
 # ----- SOURCE START -----
@@ -66,6 +67,38 @@ class ConfigurationDataStandaloneSegmentStructure(object):
     #
     # CODE SEGMENT PART START.
 
+    @staticmethod
+    def _row_of(row_item: Any) -> list[Any]:
+        """A single column row may be stored bare; always hand it back as a column list."""
+        return row_item if isinstance_loose(row_item, list) else [row_item]
+
+    @classmethod
+    def _match_row(cls, row_values: list[Any], column_types: list) -> bool:
+        """
+        Check one table row against the declared column signature.
+
+        A column entry that is itself a list marks a nested table, so it recurses.
+
+        :param row_values: list[Any]    The row content.
+        :param column_types: list       Column signature, see `table_segment_type_checker`.
+        :return: bool
+        """
+        if len(row_values) != len(column_types):
+            return False
+
+        for value_item, column_type in zip(row_values, column_types):
+            if isinstance(column_type, list):  # Nested table column.
+                if not isinstance_loose(value_item, list):
+                    return False
+                if not all(cls._match_row(cls._row_of(nested_item), column_type) for nested_item in value_item):
+                    return False
+                continue
+
+            if not isinstance_loose(value_item, column_type):
+                return False
+
+        return True
+
     def _check_in_type(self, value: Any) -> bool:
         """
         This function is used to check the value's type is in the probable type list or not.
@@ -84,13 +117,14 @@ class ConfigurationDataStandaloneSegmentStructure(object):
 
             # Check with list explain checker mode.
             case TypeExplainFormatter.LIST_TYPE_EXPLAIN:
-                for list_item in value:
-                    for index, value_item in enumerate(list_item):
-                        if not isinstance_loose(value_item, self._probable_type[index]):
-                            return False
+                # A table stores one row per entry and every row has to follow the declared
+                # column signature. The old code indexed the type container itself (that is the
+                # whole signature list) instead of its per-column entries, so every table check
+                # either blew up with IndexError or silently answered False.
+                if not isinstance_loose(value, list):
+                    return False
 
-                # Or anything else. so we can return the truth.
-                return True
+                return all(self._match_row(self._row_of(row_item), self._probable_type[0]) for row_item in value)
 
             # Make sure don't throw error.
             case _:
@@ -105,20 +139,22 @@ class ConfigurationDataStandaloneSegmentStructure(object):
         :return: bool
         """
         match limit_element[1]:  # Limit with in value, just compare it and return it is equal or not.
-            case LimitExplainFormatter.LIMIT_WITHIN_VALUE:              return value == limit_element[0]                                   # noqa
-            case LimitExplainFormatter.LIMIT_WITHOUT_VALUE:             return value != limit_element[0]                                   # noqa
+            case ExtensionExplainFormatter.LIMIT_WITHIN_VALUE:              return value == limit_element[0]                                   # noqa
+            case ExtensionExplainFormatter.LIMIT_WITHOUT_VALUE:             return value != limit_element[0]                                   # noqa
 
             # Limit with string regular, on here it will change it into the string, and try to match it is in the rule or not.
-            case LimitExplainFormatter.LIMIT_WITH_STRING_REGULAR:        return re.match(limit_element[0], str(value)) is not None         # noqa
-            case LimitExplainFormatter.LIMIT_WITHOUT_STRING_REGULAR:     return re.match(limit_element[0], str(value)) is None             # noqa
+            case ExtensionExplainFormatter.LIMIT_WITHIN_STRING_REGULAR:      return re.search(limit_element[0], str(value)) is not None        # noqa
+            case ExtensionExplainFormatter.LIMIT_WITHOUT_STRING_REGULAR:     return re.search(limit_element[0], str(value)) is None            # noqa
 
             # Limit with condition rule, welp...just means this is the left limit or the right limit.
-            case LimitExplainFormatter.LIMIT_WITHIN_CONDITION_RULE:       return limit_element[0][0] < value < limit_element[0][1]         # noqa
-            case LimitExplainFormatter.LIMIT_WITHOUT_CONDITION_RULE:      return not limit_element[0][1] < value < limit_element[0][2]     # noqa
+            # The tuple is always (low, high): the old code read [1] and [2] on the negated
+            # branches, which silently compared the wrong pair of a three slot tuple.
+            case ExtensionExplainFormatter.LIMIT_WITHIN_CONDITION_RULE:       return limit_element[0][0] < value < limit_element[0][1]         # noqa
+            case ExtensionExplainFormatter.LIMIT_WITHOUT_CONDITION_RULE:      return not limit_element[0][0] < value < limit_element[0][1]     # noqa
 
             # Just with in the equal.
-            case LimitExplainFormatter.LIMIT_WITHIN_CONDITION_AND_EQUAL:  return limit_element[0][0] >= value >= limit_element[0][1]       # noqa
-            case LimitExplainFormatter.LIMIT_WITHOUT_CONDITION_AND_EQUAL: return not limit_element[0][1] >= value >= limit_element[0][2]   # noqa
+            case ExtensionExplainFormatter.LIMIT_WITHIN_CONDITION_AND_EQUAL:  return limit_element[0][0] <= value <= limit_element[0][1]       # noqa
+            case ExtensionExplainFormatter.LIMIT_WITHOUT_CONDITION_AND_EQUAL: return not limit_element[0][0] <= value <= limit_element[0][1]   # noqa
 
             # Welp...So has this line of code can be occurred?
             case _:
@@ -126,15 +162,7 @@ class ConfigurationDataStandaloneSegmentStructure(object):
 
     @staticmethod
     def _calculate(value: list[tuple[Any, ctypes.c_uint8]]) -> Any:
-        stack_load: list[Any] = []
-        for item in value:
-            if isinstance(item[0], str) and item[0] in CALCULATE_CHAR:
-                second_value: tuple[Any, ctypes.c_uint8] = stack_load.pop()
-                first_value:  tuple[Any, ctypes.c_uint8] = stack_load.pop()
-                stack_load.append(calculate_dispose(first_value, second_value, item[0]))
-            else:
-                stack_load.append(item[0])
-        return stack_load[0]
+        return evaluate_stack(value)
 
     def format(self, *args) -> None:
         argument = iter(args)
@@ -166,27 +194,104 @@ class ConfigurationDataStandaloneSegmentStructure(object):
 
     @property
     def value(self) -> Any:
-        push_value: Any = self._calculate(self._value)
-        return float(push_value) if isinstance_loose(push_value, ConversionDecimal) else push_value
+        # A table keeps one entry per row, so reducing the stack would throw every row but the
+        # first one away: every row is handed back on its own instead.
+        if self._probable_type[1] == TypeExplainFormatter.LIST_TYPE_EXPLAIN:
+            return [self._table_row(item[0]) for item in self._value]
+
+        push_value: Any = evaluate_stack(self._value)
+
+        # FLOAT arithmetic is done with Decimal to keep the precision, but the declared type is
+        # float, so the caller must receive a float.
+        if isinstance(push_value, (ConversionDecimal, Decimal)):
+            return float(push_value)
+
+        return push_value
+
+    @staticmethod
+    def _table_row(row_item: Any) -> Any:
+        """One table row; a single column table hands back the bare value instead of a 1-tuple."""
+        if isinstance(row_item, ConfigurationDataStandaloneSegmentStructure):
+            row_item = row_item.value
+        if isinstance_loose(row_item, list) and len(row_item) == 1 and not isinstance_loose(row_item[0], list):
+            return row_item[0]
+        return row_item
 
     @value.setter
-    def value(self, new_value: list[tuple[Any, ctypes.c_uint8]]) -> None:
+    def value(self, new_value: Any) -> None:
         if not self._changeable:  # Check the changeable.
             raise InterruptedError("This is a read-only value.")
-        calc: Any = self._calculate(new_value)
+
+        # Accept both the internal stack form and a plain python value, so callers can simply
+        # write `node.value = 5` without knowing anything about the value formatters.
+        value_stack: list[tuple[Any, ctypes.c_uint8]] = self._as_value_stack(new_value)
 
         # Check the type and limit, make sure it's valid.
-        if not self._check_in_type(calc):
-            raise TypeError("Error type of the value in here.")
-        if len(self._limit_value_list) > 0:
-            for limit_item in self._limit_value_list:
-                if self._check_in_limit(calc, limit_item):
-                    break
-            else:  # When not break, we can raise the error means this is breaking the limit rule.
-                raise ValueError("This value is in the limit list's rule, please check and change the rule.")
+        if self._probable_type[1] == TypeExplainFormatter.LIST_TYPE_EXPLAIN:
+            rows: list[Any] = [item[0] for item in value_stack]
+            if not self._check_in_type(rows):
+                raise TypeError("Error type of the value in here.")
+            self._check_limit_rows(rows)
+
+        else:
+            calc: Any = evaluate_stack(value_stack)
+            if not self._check_in_type(calc):
+                raise TypeError("Error type of the value in here.")
+            self._check_limits(calc)
 
         # Or nothing limit in here, so we can just add it into the value part.
-        self._value = new_value
+        self._value = value_stack
+
+    @staticmethod
+    def _as_value_stack(new_value: Any) -> list[tuple[Any, ctypes.c_uint8]]:
+        """
+        Normalise anything the caller assigns into the internal `list[tuple[Any, formatter]]`
+        representation.
+
+        :param new_value: Any
+        :return: list[tuple[Any, ctypes.c_uint8]]
+        """
+        looks_internal: bool = (
+            isinstance_loose(new_value, list)
+            and len(new_value) > 0
+            and isinstance(new_value[0], tuple)
+            and len(new_value[0]) == 2
+        )
+        if looks_internal:
+            return list(new_value)
+
+        if isinstance_loose(new_value, list):
+            return [(item, ValueFormatter.DEFAULT_EMPTY_FORMATTER) for item in new_value]
+
+        return [(new_value, ValueFormatter.DEFAULT_EMPTY_FORMATTER)]
+
+    def _check_limits(self, calc: Any) -> None:
+        """
+        Raise when a value breaks its LIMIT / REGULAR rules.
+
+        The list is a DISJUNCTION: one accepting rule is enough, which is what makes
+        `LIMIT(1, 2, 5, 10)` mean "any of these" and `LIMIT(EXCLUDE 5)` mean "anything but 5",
+        and what lets both kinds be mixed in a single list.
+
+        :param calc: Any    Already reduced value.
+        :return: None
+        """
+        if len(self._limit_value_list) == 0:
+            return
+
+        for limit_item in self._limit_value_list:
+            if self._check_in_limit(calc, limit_item):
+                return
+
+        raise ValueError("This value is in the limit list's rule, please check and change the rule.")
+
+    def _check_limit_rows(self, rows: list[Any]) -> None:
+        """Same check as `_check_limits` but applied to every row of a table."""
+        if len(self._limit_value_list) == 0:
+            return
+
+        for row_item in rows:
+            self._check_limits(row_item)
 
     @property
     def probable_type(self):
