@@ -20,11 +20,186 @@
 - NOTE
 <pre>Check the syntax, make sure there is no anything error in here.</pre>
 
+#### Call "start\_check" entry
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+#### "start\_check" call "validator"
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+#### "validator" call "\_parse\_program"
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+#### Start loop to search the header
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+##### Compare the keyword \(Token kind\)
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+##### "IDENTIFICATION": Jump to "\_parse\_identification\_statement", Check the config header
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+- NOTE
+<pre>Every BOT file need the configuration header to notice the parser that this config file's id, follow rules of the parser's version, data's encode, and readonly or not (like global lock).
+
+When in here, this configuration file's header like this:
+[Identify word signal] + [What type you want to identify] + [identify value]
+
+Example:
+IDENTIFICATION CONFIGURATION-ID &quot;XXX&quot;;  # Identify this config file's global id is &quot;XXX&quot;.
+
+IDENTIFICATION CONFIGURATION-VERSION 1.0;  # Identify this config file is follow the rules of parser which version is 1.0, so you won't need to change the config file when you want to update the parser.
+
+IDENTIFICATION CONFIGURATION-ENCODE &quot;UTF-8&quot;;  # Tell that what need to decode with. This parser will change the rule and reload the file with correct encode.
+
+IDENTIFICATION CONFIGURATION-READONLY TRUE;  # Global lock, you can use this to reject all the change-requests from the developer.</pre>
+
+###### Compare the sentence starts with "IDENTIFICATION" keyword
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+###### YES: Check the identify field
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+####### Compare the identify field
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+####### "CONFIGURATION\-ID": Follow string rules to check\.
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+####### "CONFIGURATION\-VERSION": Follow float number rules to check\.
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+####### "CONFIGURATION\-ENCODE": Folloe string rules to check\.
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+####### "CONFIGURATION\-READONLT": Folloe boolean rules to check\.
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+####### OTHER: Not allowed, cause the BOTSyntaxError\.
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+###### NO: Cause the BOTSyntaxError
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+##### "DATABASES\-START": Jump out the loop, goto databases checker
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
+##### Other: Jump to raise the BOTSyntaxError
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#FFFFFF`
+
+
 ### Parse the file
 > borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
 
 - NOTE
 <pre>Change the string's syntax which describe how this data looks like to the data's type which python interpreter can understand.</pre>
+
+#### Save string into the Queue
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+#### Check the sentence "DATABASES\-START"
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+#### NO: Jump to "\_data\_load\_title" function
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### Check the describe
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### "CONFIGURATION\-ID": pop a string from Queue
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### "CONFIGURATION\-VERSION": load version decimal
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### "CONFIGURATION\-ENCODE": pop a string from Queue
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### "CONFIGURATION\-READONLY": load readonly boolean decimal
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+#### YES:
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### Search correct brace edge
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### Load all the main database part into a temp string
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### Jump to "\_data\_load\_databases" function
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+###### Start database loop
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+- NOTE
+<pre>Start to load all the database loop.
+All the database follows those rules:
+[NAME] + [ + [TYPE] + ] + [CHANGEABLE] + = + [VALUE] + -&gt; + [EXTENSION REQUIRE] + ;
+</pre>
+
+####### Name check code segment
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+####### Type check code segment
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+####### Changeable check code segment
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+####### Value check code segment
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+####### Extension require check code segment
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### Search correct brace edge
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### Load all the main conversion part into a temp string
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+##### Jump to "\_data\_load\_conversion" function
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
+
+###### Start conversion loop
+> borderColor=`#0000FF`,fillColor=`#121212`,textColor=`#DBDBDB`
+
 
 ## Execute segment
 > borderColor=`#0000FF`,fillColor=`#000000`,leftSide=`true`,textColor=`#FFFFFF`

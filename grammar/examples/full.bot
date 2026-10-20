@@ -1,0 +1,79 @@
+IDENTIFICATION CONFIGURATION-ID "example.full-configuration";
+IDENTIFICATION CONFIGURATION-VERSION 1.0;
+IDENTIFICATION CONFIGURATION-READONLY FALSE;
+IDENTIFICATION CONFIGURATION-ENCODE "utf-8";
+
+# Note: This is the final example.
+
+DATABASES-START;
+{
+    INT-STATE   [INT]   CST =   12345567;
+    DEC-STAGE   [INT]   CST =   -0d1_000_000;
+    HEX-STATE   [INT]   CST =   0x0FAC  -> LIMIT(1,3,5,8 TO 10,0x0FAC);
+    OCT-STATE   [INT]   CST =   -0o7353;
+    BIN-STATE   [INT]   CST =   0b10010010  ->  LIMIT 1 TO INFINITE;
+
+    FLOAT-STATE [FLOAT] CST =   12.3431;
+    DEC-FLOAT   [FLOAT] CST =   -0d2342_21.2343_21_2456;
+    HEX-FLOAT   [FLOAT] CST =   -0xFC.0F3A;
+    OCT-FLOAT   [FLOAT] CST =   0o23.12345;
+    BIN-FLOAT   [FLOAT] CST =   0b101.1010101;
+
+    INF-STATE   [INT]   MUT =   INFINITE;
+    NAN-STATE   [INT]   MUT =   NOT-A-NUMBER;
+    BOOL-TRUE   [BOOL]  CST =   TRUE;
+    BOOL-FALSE  [BOOL]  CST =   FALSE;
+    EMPTY-VAL   [FLOAT] CST =   NULL;
+
+    STRING-HB   [STRING]    CST =   "\"Hello\"" ->  REGULAR("^$");
+    STRING-HEX  [STRING]    CST =   "\x0c\xfb\xff\x4c\x23\x75";
+    STRING-CALC [STRING]    MUT =   "A" * 10 + " is here!";
+    STRING-IP   [STRING]    CST =   CALL packages.getcurrectipv4;
+    STRING-HDD  [STRING]    CST =   CALL packages.getdiskfreeSPACE;
+    DERIVED     [STRING]    CST =   CALL mathematics.derived("3x*4x^2");
+
+    CALC-DATA   [DATABASE]  CST =   {
+        CALC-INT    [INT]   CST =   1+3+5+34+23-43*(4/2-1)+0xFC;
+        CALC-FLOAT  [FLOAT] CST =   1.3+4.6;
+        CALC-GATE   [INT]   CST =   1 & 4 << 10;
+        FLT-GATE    [FLOAT] CST =   0.5 | 0.3 ^ CALL mathematics.pi;
+    };
+
+    LIST-EXAM   [LIST<INT>] = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
+    TABLE-EXAM  [TABLE<INT, STRING, BOOL>] = [
+        (1, "He", FALSE),
+        (2, "Be", TRUE),
+        (3, "Ne", FALSE)
+    ];
+
+    FILE-COMP   [FILE]  CST =   "C:\\path\to\your\directory";
+    CONVERSION-EXAMPLE  [CONVERSION<INT>]   CST   = CALL packages.getcurrenthour;
+    CONVERSION-CUSTOM   [CONVERSION<INT>]   CST   = CALL custom_conversion;
+    FORMAT_CALC [INT]   CST =   1 + 3 + 4 + FORMAT + FORMAT DEFAULT 5;
+};
+DATABASES-END;
+
+CONVERSION-START;
+{
+    CONVERSION Countdown [INT] WITH-COUNT countdown LIMIT 1 TO 50 {
+        COMPARE 1 <= countdown <= 30 THEN RETURN 1;
+        COMPARE 30 < countdown <= 40 THEN RETURN 2;
+        COMPARE DEFAULT RETURN 3;
+    };
+    CONVERSION TimeDelay [INT] WITH-TIME other_val {
+        COMPARE 0 < other_val.hour < SUM 1 TO 4 THEN RETURN SUM 1 TO 2;
+        COMPARE 11 <= other_val.hour <= 24 THEN RETURN 1 + 2;
+    };
+    CONVERSION PathDelay [STRING] WITH-PATH other_val {
+        COMPARE other_val[0] == 'C' THEN RETURN 1;
+        COMPARE OTHER_VAL[0] == 'D' THEN RETURN 2;
+        COMPARE DEFAULT THEN RETURN 3;
+    };
+    CONVERSION ValueDelay [INT] WITH-VALUE other_val [STRING] = CALL package.GetMacAddress() {
+        COMPARE DEFAULT THEN RETURN other_val[1 TO 4];
+    };
+    CONVERSION Outer [INT] WITH-VALUE other_val [STRING] {
+        COMPARE DEFAULT THEN RETURN 1234;
+    };
+};
+CONVERSION-END;
